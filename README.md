@@ -18,7 +18,7 @@ X = reshape([1 1], (2, 1))
 Y = reshape([0 2], (2, 1))
 
 # main model and policy / forecast variables
-model = ApplicationDrivenLearning.AppDrivenModel()
+model = ApplicationDrivenLearning.Model()
 @variables(model, begin
     z, ApplicationDrivenLearning.Policy
     θ, ApplicationDrivenLearning.Forecast

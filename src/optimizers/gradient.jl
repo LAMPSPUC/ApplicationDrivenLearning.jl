@@ -1,7 +1,7 @@
 using Flux
 
 function train_with_gradient!(  
-    model::AppDrivenModel,
+    model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     params::Dict{Symbol, Any}

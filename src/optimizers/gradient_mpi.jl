@@ -5,7 +5,7 @@ import JobQueueMPI as JQM
 
 
 function train_with_gradient_mpi!(
-    model::AppDrivenModel,
+    model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     params::Dict{Symbol, Any}

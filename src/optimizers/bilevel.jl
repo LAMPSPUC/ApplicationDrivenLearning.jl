@@ -4,7 +4,7 @@ using BilevelJuMP
 
 
 function solve_bilevel(
-    model::AppDrivenModel,
+    model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     params::Dict{Symbol, Any}

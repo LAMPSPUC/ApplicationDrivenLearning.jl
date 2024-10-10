@@ -33,7 +33,7 @@ end
 *(c::Number, p::Forecast) = Forecast(c*p.plan, c*p.assess)
 
 # main model
-mutable struct AppDrivenModel <: JuMP.AbstractModel
+mutable struct Model <: JuMP.AbstractModel
     plan::JuMP.Model
     assess::JuMP.Model
     forecast::Union{PredictiveModel, Nothing}
@@ -47,7 +47,7 @@ mutable struct AppDrivenModel <: JuMP.AbstractModel
     obj_dict::Dict{Symbol,Any}
     build::Bool
 
-    function AppDrivenModel()
+    function Model()
         plan = JuMP.Model()
         assess = JuMP.Model()
 
@@ -62,28 +62,28 @@ end
 """
 Returns vector of policy variables from plan model.
 """
-function plan_policy_vars(model::AppDrivenModel)
+function plan_policy_vars(model::Model)
     return [v.plan for v in model.policy_vars]
 end
 
 """
 Returns vector of policy variables from assess model.
 """
-function assess_policy_vars(model::AppDrivenModel)
+function assess_policy_vars(model::Model)
     return [v.assess for v in model.policy_vars]
 end
 
 """
 Returns vector of forecast variables from plan model.
 """
-function plan_forecast_vars(model::AppDrivenModel)
+function plan_forecast_vars(model::Model)
     return [v.plan for v in model.forecast_vars]
 end
 
 """
 Returns vector of forecast variables from assess model.
 """
-function assess_forecast_vars(model::AppDrivenModel)
+function assess_forecast_vars(model::Model)
     return [v.assess for v in model.forecast_vars]
 end
 
@@ -92,7 +92,7 @@ Sets Chain, Dense or custom PredictiveModel object as
 forecast model.
 """
 function set_forecast_model(
-    model::AppDrivenModel, 
+    model::Model, 
     network::Union{PredictiveModel, Flux.Chain, Flux.Dense}
 )
     if typeof(network) == PredictiveModel
@@ -104,7 +104,7 @@ function set_forecast_model(
     model.forecast = forecast
 end
 
-function forecast(model::AppDrivenModel, X::AbstractMatrix)
+function forecast(model::Model, X::AbstractMatrix)
     return model.forecast(X)
 end
 
@@ -112,7 +112,7 @@ end
 Creates new forecast variables to plan model using MOI.Parameter
 and new constraint fixing to original forecast variables.
 """
-function build_plan_model_forecast_params(model::AppDrivenModel)
+function build_plan_model_forecast_params(model::Model)
     # adds parametrized forecast variables using MOI.Parameter
     forecast_size = size(model.forecast_vars)[1]
     model.plan_forecast_params = @variable(
@@ -130,7 +130,7 @@ end
 """
 Creates new constraint to assess model that fixes policy variables.
 """
-function build_assess_model_policy_constraint(model::AppDrivenModel)
+function build_assess_model_policy_constraint(model::Model)
     @constraint(
         model.assess, 
         assess_policy_fix, 
@@ -142,7 +142,7 @@ end
 Calls functions that set new variables and constraints that are
 necessary to cost computation.
 """
-function build(model::AppDrivenModel)
+function build(model::Model)
     if model.build
         return
     end
@@ -165,7 +165,7 @@ include("optimizers/bilevel.jl")
 
 
 function train!(
-    model::AppDrivenModel, 
+    model::Model, 
     X::Matrix{<:Real}, 
     y::Matrix{<:Real}, 
     options::Options,
@@ -186,7 +186,7 @@ function train!(
     end
 end
 
-export AppDrivenModel, PredictiveModel, Plan, Assess,
+export Model, PredictiveModel, Plan, Assess,
     Policy, Forecast,
     set_forecast_model, forecast, 
     compute_cost, train!

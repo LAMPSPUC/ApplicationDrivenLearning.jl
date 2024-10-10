@@ -3,7 +3,7 @@ using MPI
 import JobQueueMPI as JQM
 
 function train_with_nelder_mead_mpi!(
-    model::AppDrivenModel,
+    model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     params::Dict{Symbol, Any}

@@ -19,7 +19,7 @@ function JuMP.build_variable(
 end
 
 function JuMP.add_variable(
-    model::AppDrivenModel, 
+    model::Model, 
     policy_info::PolicyInfo, 
     name::String
 )
@@ -60,7 +60,7 @@ function JuMP.build_variable(
 end
 
 function JuMP.add_variable(
-    model::AppDrivenModel, 
+    model::Model, 
     forecast_info::ForecastInfo, 
     name::String
 )
@@ -81,23 +81,23 @@ function JuMP.add_variable(
 end
 
 # plan and assess models
-function Plan(model::AppDrivenModel)
+function Plan(model::Model)
     return model.plan::JuMP.Model
 end
 
-function Assess(model::AppDrivenModel)
+function Assess(model::Model)
     return model.assess::JuMP.Model
 end
 
 # jump functions
-function JuMP.objective_sense(model::AppDrivenModel)
+function JuMP.objective_sense(model::Model)
     @assert JuMP.objective_sense(model.plan) == JuMP.objective_sense(model.assess)
     return JuMP.objective_sense(model.plan)
 end
 
-JuMP.num_variables(m::AppDrivenModel) = JuMP.num_variables(m.plan) + JuMP.num_variables(m.assess)
+JuMP.num_variables(m::Model) = JuMP.num_variables(m.plan) + JuMP.num_variables(m.assess)
 
-function JuMP.show_constraints_summary(io::IO, model::AppDrivenModel)
+function JuMP.show_constraints_summary(io::IO, model::Model)
     println("Plan Model:")
     JuMP.show_constraints_summary(io, model.plan)
     println("\nAssess Model:")
@@ -105,7 +105,7 @@ function JuMP.show_constraints_summary(io::IO, model::AppDrivenModel)
     return
 end
 
-function JuMP.show_backend_summary(io::IO, model::AppDrivenModel)
+function JuMP.show_backend_summary(io::IO, model::Model)
     println("Plan Model:")
     JuMP.show_backend_summary(io, model.plan)
     println("\nAssess Model:")
@@ -113,9 +113,9 @@ function JuMP.show_backend_summary(io::IO, model::AppDrivenModel)
     return
 end
 
-JuMP.object_dictionary(model::AppDrivenModel) = model.obj_dict
+JuMP.object_dictionary(model::Model) = model.obj_dict
 
-function JuMP.set_optimizer(model::AppDrivenModel, builder)
+function JuMP.set_optimizer(model::Model, builder)
     # set diffopt optimizer for plan model
     new_diff_optimizer = DiffOpt.diff_optimizer(builder)
     JuMP.set_optimizer(
@@ -127,7 +127,7 @@ function JuMP.set_optimizer(model::AppDrivenModel, builder)
     JuMP.set_optimizer(model.assess, builder)
 end
 
-function JuMP.set_silent(model::AppDrivenModel)
+function JuMP.set_silent(model::Model)
     MOI.set(model.plan, MOI.Silent(), true)
     MOI.set(model.assess, MOI.Silent(), true)
 end

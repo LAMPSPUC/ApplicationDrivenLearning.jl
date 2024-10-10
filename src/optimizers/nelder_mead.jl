@@ -1,7 +1,7 @@
 using Optim
 
 function train_with_nelder_mead!(
-    model::AppDrivenModel,
+    model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     params::Dict{Symbol, Any}

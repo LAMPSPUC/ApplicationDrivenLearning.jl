@@ -1,7 +1,7 @@
 using Distributed
 
 function compute_single_step_cost(
-    model::AppDrivenModel,
+    model::Model,
     y::Vector{<:Real},
     yhat::Vector{<:Real},
 )
@@ -26,7 +26,7 @@ end
 Computes the gradient of the cost function (C) with respect to the predictions (̂y).
 """
 function compute_single_step_gradient(
-    model::AppDrivenModel,
+    model::Model,
     dCdz::Vector{<:Real},
     dCdy::Vector{<:Real}
 )               
@@ -52,7 +52,7 @@ function compute_single_step_gradient(
 end
 
 function compute_cost(
-    model::AppDrivenModel,
+    model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     with_gradients::Bool=false,
