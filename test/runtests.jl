@@ -8,3 +8,4 @@ using Test
 
 include("utils.jl")
 include("test_newsvendor.jl")
+include("test_umbrella.jl")
