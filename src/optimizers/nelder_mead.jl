@@ -8,6 +8,9 @@ function train_with_nelder_mead!(
 )
 
     # extract params
+    initial_simplex = get(params, :initial_simplex, Optim.AffineSimplexer())
+    parameters = get(params, :parameters, Optim.AdaptiveParameters())
+    filter!(x -> !(x[1] in [:initial_simplex, :parameters]), params)
     optim_options = Optim.Options(;params...)
 
     # fitness function
@@ -21,7 +24,7 @@ function train_with_nelder_mead!(
     res = Optim.optimize(
         fitness,
         initial_sol,
-        NelderMead(),
+        NelderMead(;parameters=parameters, initial_simplex=initial_simplex),
         optim_options
     )
     # update model parameters
