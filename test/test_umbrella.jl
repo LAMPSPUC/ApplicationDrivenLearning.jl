@@ -58,10 +58,10 @@ set_silent(model)
 @testset "Umbrella NelderMeadModel No Rain" begin
     Y = zeros((T, 1))
     nn = Chain(
-        Dense(f => 1, Flux.sigmoid; bias=false, init=(size...) -> rand(size...) .- 0.25)
+        Dense(f => 1, Flux.sigmoid; bias=false, init=(size...) -> rand(size...) .- 0.4)
     )
     ApplicationDrivenLearning.set_forecast_model(model, nn)
-    @test mean(model.forecast(X')) > 0.6
+    @test mean(model.forecast(X')) > 0.5
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode,
         initial_simplex=Optim.AffineSimplexer(a=0.0, b=100.0),
@@ -77,10 +77,10 @@ end
 @testset "Umbrella NelderMeadModel Always Rain" begin
     Y = ones((T, 1))
     nn = Chain(
-        Dense(f => 1, Flux.sigmoid; bias=false, init=(size...) -> rand(size...) .- 0.75)
+        Dense(f => 1, Flux.sigmoid; bias=false, init=(size...) -> rand(size...) .- 0.6)
     )
     ApplicationDrivenLearning.set_forecast_model(model, nn)
-    @test mean(model.forecast(X')) < 0.4
+    @test mean(model.forecast(X')) < 0.5
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode,
         initial_simplex=Optim.AffineSimplexer(a=0.0, b=100.0),

@@ -32,11 +32,16 @@ end)
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 nn = Chain(
-    Dense(1 => 1; bias=false),
+    Dense(1 => 1; bias=false, init=(size...) -> rand(size...)),
 )
 
 @testset "Newsvendor BilevelMode" begin
-    ApplicationDrivenLearning.set_forecast_model(model, nn)
+    ApplicationDrivenLearning.set_forecast_model(
+        model,
+        Chain(
+            Dense(1 => 1; bias=false, init=(size...) -> rand(size...)),
+        )
+    )
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.BilevelMode, 
         optimizer=HiGHS.Optimizer,
@@ -48,7 +53,12 @@ nn = Chain(
 end
 
 @testset "Newsvendor NelderMeadMode" begin
-    ApplicationDrivenLearning.set_forecast_model(model, nn)
+    ApplicationDrivenLearning.set_forecast_model(
+        model,
+        Chain(
+            Dense(1 => 1; bias=false, init=(size...) -> rand(size...)),
+        )
+    )
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode, 
         iterations=100,
@@ -60,7 +70,12 @@ end
 end
 
 @testset "Newsvendor GradientMode" begin
-    ApplicationDrivenLearning.set_forecast_model(model, nn)
+    ApplicationDrivenLearning.set_forecast_model(
+        model,
+        Chain(
+            Dense(1 => 1; bias=false, init=(size...) -> rand(size...)),
+        )
+    )
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.GradientMode;
         rule=Flux.Adam(1.0), 
