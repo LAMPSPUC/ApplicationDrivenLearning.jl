@@ -117,7 +117,10 @@ function solve_bilevel(
         if has_params(layer)
             (layer_size_2, layer_size_1) = size(layer.weight)
             W = @variable(Upper(bilevel_model), [1:layer_size_2, 1:layer_size_1])
-            b = @variable(Upper(bilevel_model), [1:layer_size_2])
+            b = zeros(layer_size_2)
+            if layer.weight == true
+                b = @variable(Upper(bilevel_model), [1:layer_size_2])
+            end
             layer_inpt = layer.σ(W * layer_inpt' .+ b)  # (w2, w1) * (w1, T) .+ (w2, 1)
             predictive_model_vars[i_layer] = Dict(:W=>W, :b=>b)
         elseif supertype(typeof(layer)) == Function
