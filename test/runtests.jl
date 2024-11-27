@@ -5,6 +5,7 @@ using HiGHS
 using Optim
 using BilevelJuMP
 using Statistics
+using Distributions
 using Test
 using Random
 
