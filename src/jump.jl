@@ -131,3 +131,24 @@ function JuMP.set_silent(model::Model)
     MOI.set(model.plan, MOI.Silent(), true)
     MOI.set(model.assess, MOI.Silent(), true)
 end
+
+function JuMP.num_variables(model::Model)
+    return JuMP.num_variables(model.plan) + JuMP.num_variables(model.assess)
+end
+
+function JuMP.num_constraints(model::Model)
+    return JuMP.num_constraints(model.plan) + JuMP.num_constraints(model.assess)
+end
+
+function Base.print(io::IO, model::Model)
+    println("Plan Model:")
+    println(model.plan)
+    println("\nAssess Model:")
+    println(model.assess)
+    println("\nForecast Model:")
+    if model.forecast == nothing
+        println("Not defined.")
+    else
+        println(model.forecast.network)
+    end
+end
