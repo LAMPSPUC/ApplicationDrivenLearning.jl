@@ -59,7 +59,7 @@ function compute_cost(
     n_workers::Int=1
 )
 
-    # TODO: move assertions to prior function
+    # data size assertions
     @assert size(X)[2] == model.forecast.input_size "Input size mismatch"
     @assert size(Y)[2] == model.forecast.output_size "Output size mismatch"
 

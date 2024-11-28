@@ -1,9 +1,5 @@
 module ApplicationDrivenLearning
 
-# TODO: implement line-search for gradient descent
-# TODO: transform GLM to Flux sequential model
-# TODO: basic energy operation model
-# TODO: function names
 
 using Flux
 using JuMP
