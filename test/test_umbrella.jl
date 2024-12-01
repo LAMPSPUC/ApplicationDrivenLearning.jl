@@ -3,7 +3,7 @@ The umbrella problem
 
 z: 1 if take the umbrella, 0 otherwise
 y: 1 if it rains, 0 otherwise
-C = 0.5 * z + y * (1-z)
+C = 0.5 * z + 2 * y * (1-z)
 
 C = 0.5 * z + k
 k >= 2 - bigM * (1-y) - bigM * z
@@ -12,12 +12,15 @@ y=0, z=0 -> C=0.0
 y=1, z=0 -> C=2.0
 y=0, z=1 -> C=0.5
 y=1, z=1 -> C=0.5
+
+E[C | Prob(y=1)=p & z=0] = 2p
+E[C | Prob(y=1)=p & z=1] = 0.5
 """
 bigM = 100
 c1 = 0.5  # cost of taking the umbrella
 c2 = 2.0  # cost of not taking the umbrella when it rains
 T = 30
-f = 10
+f = 1
 X = ones((T, f))
 Y = rand(0:1, (T, 1))
 best_decision = 1.0
@@ -37,7 +40,7 @@ end
     w, Bin
 end)
 @constraints(ApplicationDrivenLearning.Plan(model), begin
-    w >= 2*(y.plan - 0.5)
+    w >= c2 * (y.plan - 0.5)
     w <= y.plan + 0.5
     k >= c2 - bigM*(1-w) - bigM*z.plan
 end)
