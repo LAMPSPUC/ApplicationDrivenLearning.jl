@@ -14,6 +14,9 @@ function train_with_gradient_mpi!(
     rule = get(params, :rule, Flux.Descent())
     epochs = get(params, :epochs, 100)
     batch_size = get(params, :batch_size, -1)
+    verbose = get(params, :verbose, true)
+    compute_cost_every = get(params, :compute_cost_every, 1)
+    mpi_finalize = get(params, :mpi_finalize, true)
 
     JQM.mpi_init()
     
@@ -26,13 +29,25 @@ function train_with_gradient_mpi!(
     dCdz = Vector{Float32}(undef, size(model.policy_vars, 1))
     dCdy = Vector{Float32}(undef, model.forecast.output_size)
     T = size(X)[1]
+    stochastic = batch_size > 0
+    compute_full_cost = true
+    
+    # precompute batches
+    batches = repeat(1:T, outer=(1, epochs))'
+    if stochastic
+        batches = rand(1:T, (epochs, batch_size))
+    end
 
     # cost and gradient compute function
-    function compute_cost_and_gradients(θ, i)
+    function compute_cost_and_gradients(θ, i, compute_gradient::Bool)
         apply_params(model.forecast, θ)
         yhat = model.forecast(X[i, :])
-        step_cost = compute_single_step_cost(model, Y[i, :], yhat)
-        step_grad = compute_single_step_gradient(model, dCdz, dCdy)
+        step_cost = compute_single_step_cost(model, Y[i, :], yhat)        
+        if compute_gradient
+            step_grad = compute_single_step_gradient(model, dCdz, dCdy)
+        else
+            step_grad = nothing
+        end
               
         return step_cost, step_grad
         
@@ -43,38 +58,61 @@ function train_with_gradient_mpi!(
 
         # main loop
         for epoch=1:epochs
-            println("Epoch $epoch")
+            compute_full_cost = epoch % compute_cost_every == 0
+
+            # broadcast `is_done = false`
             MPI.bcast(is_done, MPI.COMM_WORLD)
 
-            # define batch
-            if batch_size > 0
-                batch = rand(1:T, batch_size)
-            else
-                batch = 1:T
-            end
-            
-            # compute cost and gradient
+            # extract current parameters
             curr_θ = extract_params(model.forecast)
 
-            pmap_result = JQM.pmap(
-                (v) -> compute_cost_and_gradients(v[1], v[2]), 
-                [[curr_θ, i] for i in batch]
-            )
-            curr_C = sum([r[1] for r in pmap_result])
-            dCdy = sum([r[2] for r in pmap_result])
-            trace[epoch] = curr_C
-            println("Cost: $curr_C")
+            if stochastic
+                
+                # compute stochastic gradient
+                pmap_result_with_gradients = JQM.pmap(
+                    (v) -> compute_cost_and_gradients(v[1], v[2], true), 
+                    [[curr_θ, i] for i in batches[epoch, :]]
+                )
+                dCdy = sum([r[2] for r in pmap_result_with_gradients])
 
-            # evaluate if best model
-            if curr_C <= best_C
-                best_C = curr_C
-                best_θ = curr_θ
+                if compute_full_cost
+                    # broadcast `is_done = false` again
+                    MPI.bcast(is_done, MPI.COMM_WORLD)
+
+                    # compute full cost
+                    pmap_result_without_gradients = JQM.pmap(
+                        (v) -> compute_cost_and_gradients(v[1], v[2], false), 
+                        [[curr_θ, i] for i=1:T]
+                    )
+                    curr_C = sum([r[1] for r in pmap_result_without_gradients])
+                end
+            
+            else
+                # compute full cost and gradient
+                pmap_result = JQM.pmap(
+                    (v) -> compute_cost_and_gradients(v[1], v[2], true), 
+                    [[curr_θ, i] for i=1:T]
+                )
+                curr_C = sum([r[1] for r in pmap_result])
+                dCdy = sum([r[2] for r in pmap_result])
+            end
+
+            if compute_full_cost
+                # store and print cost
+                trace[epoch] = curr_C
+                if verbose
+                    println("Epoch $epoch | Cost = $(round(curr_C, digits=2))")
+                end
+
+                # evaluate if best model
+                if curr_C <= best_C
+                    best_C = curr_C
+                    best_θ = curr_θ
+                end
             end
     
             # take gradient step (if not last epoch)
-            if epoch < epochs
-                apply_gradient!(model.forecast, dCdy, rule)
-            end
+            apply_gradient!(model.forecast, dCdy, rule)
         end
         
         # release workers
@@ -88,12 +126,14 @@ function train_with_gradient_mpi!(
             if is_done
                 break
             end
-            JQM.pmap((v) -> compute_cost_and_gradients(v[1], v[2]), [])
+            JQM.pmap((v) -> compute_cost_and_gradients(v[1], v[2], true), [])
         end
     end
 
     JQM.mpi_barrier()
-    JQM.mpi_finalize()
+    if mpi_finalize
+        JQM.mpi_finalize()
+    end
 
     return Solution(best_C, best_θ)
 end
