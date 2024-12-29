@@ -50,8 +50,10 @@ function train_with_gradient!(
         compute_full_cost = epoch % compute_cost_every == 0
 
         if stochastic
+            epochx = X[batches[epoch, :], :]
             C, dC = stochastic_compute(model, X, Y, batches[epoch, :], compute_full_cost)
         else
+            epochx = X
             C, dC = deterministic_compute(model, X, Y)
         end
         
@@ -70,7 +72,7 @@ function train_with_gradient!(
         end
 
         # take gradient step
-        apply_gradient!(model.forecast, dC, rule)
+        apply_gradient!(model.forecast, dC, epochx, rule)
 
     end
 

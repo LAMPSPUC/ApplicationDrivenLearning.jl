@@ -67,7 +67,7 @@ function train_with_gradient_mpi!(
             curr_θ = extract_params(model.forecast)
 
             if stochastic
-                
+                epochx = X[batches[epoch, :], :]
                 # compute stochastic gradient
                 pmap_result_with_gradients = JQM.pmap(
                     (v) -> compute_cost_and_gradients(v[1], v[2], true), 
@@ -88,6 +88,7 @@ function train_with_gradient_mpi!(
                 end
             
             else
+                epochx = X
                 # compute full cost and gradient
                 pmap_result = JQM.pmap(
                     (v) -> compute_cost_and_gradients(v[1], v[2], true), 
@@ -112,7 +113,7 @@ function train_with_gradient_mpi!(
             end
     
             # take gradient step (if not last epoch)
-            apply_gradient!(model.forecast, dCdy, rule)
+            apply_gradient!(model.forecast, dCdy, epochx, rule)
         end
         
         # release workers

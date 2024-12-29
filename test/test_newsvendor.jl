@@ -62,7 +62,8 @@ end
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode, 
         iterations=100,
-        time_limit=60
+        time_limit=60,
+        show_trace=false
     )
     sol = ApplicationDrivenLearning.train!(model, X, Y, opt)
     @test sol.params[1] ≈ best_decision atol=1e-2
@@ -79,9 +80,9 @@ end
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.GradientMode;
         rule=Flux.Adam(1.0), 
-        epochs=300,
+        epochs=150,
         batch_size=-1, 
-        verbose=true
+        verbose=false
     )
     sol = ApplicationDrivenLearning.train!(model, X, Y, opt)
     @test sol.params[1] ≈ best_decision atol=1e-2

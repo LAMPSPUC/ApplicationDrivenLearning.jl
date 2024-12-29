@@ -12,5 +12,5 @@ using Random
 Random.seed!(123)
 
 include("utils.jl")
+include("test_predictive_model.jl")
 include("test_newsvendor.jl")
-include("test_umbrella.jl")

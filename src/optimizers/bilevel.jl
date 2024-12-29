@@ -110,33 +110,48 @@ function solve_bilevel(
 
     # implement predictive model expression iterating through 
     # layers and creating predictive expression
-    layer_inpt = X[1:T, :]
+    layers_inpt = Dict{Any, Any}(
+        output_idx => X[1:T, input_idx]
+        for (input_idx, output_idx) in model.forecast.input_output_map[1]
+    )
     predictive_model_vars = Dict{Int, Any}()
     i_layer = 1
-    for layer in model.forecast.network
+    for layer in model.forecast.networks[1]
+        # if it is layer with parameters, process output
         if has_params(layer)
-            (layer_size_2, layer_size_1) = size(layer.weight)
-            W = @variable(Upper(bilevel_model), [1:layer_size_2, 1:layer_size_1])
-            b = zeros(layer_size_2)
-            if layer.weight == true
-                b = @variable(Upper(bilevel_model), [1:layer_size_2])
+            # get size and parameters W and b
+            (layer_size_out, layer_size_in) = size(layer.weight)
+            W = @variable(Upper(bilevel_model), [1:layer_size_out, 1:layer_size_in])        
+            if layer.bias == false
+                b = zeros(layer_size_out)
+            else
+                b = @variable(Upper(bilevel_model), [1:layer_size_out])
             end
-            layer_inpt = layer.σ(W * layer_inpt' .+ b)'  # (w2, w1) * (w1, T) .+ (w2, 1)
             predictive_model_vars[i_layer] = Dict(:W=>W, :b=>b)
+            # build layer output as next layer input
+            for output_idx in values(model.forecast.input_output_map[1])
+                layers_inpt[output_idx] = layer.σ(W * layers_inpt[output_idx]' .+ b)'
+            end
+        # if activation function layer, just apply
         elseif supertype(typeof(layer)) == Function
-            layer_inpt = layer(layer_inpt)
+            for output_idx in values(model.forecast.input_output_map[1])
+                layers_inpt[output_idx] = layer(layers_inpt[output_idx])
+            end
         else
             println("Network layer $ilayer type not supported")
         end
         i_layer += 1
     end
-    y_hat = layer_inpt'
+    y_hat = Matrix{Any}(undef, size(Y, 1), size(Y, 2))
+    for (output_idx, prediction) in layers_inpt
+        y_hat[:, output_idx] = prediction
+    end
 
     # and apply prediction on lower model as constraint
     ipred_var_count = 1
     for pred_var in plan_forecast_vars(model)
         low_pred_var = low_var_map[pred_var] 
-        @constraint(Lower(bilevel_model), low_pred_var .- y_hat[ipred_var_count, :] .== 0)
+        @constraint(Lower(bilevel_model), low_pred_var .- y_hat[:, ipred_var_count] .== 0)
         ipred_var_count += 1
     end
 
@@ -145,7 +160,7 @@ function solve_bilevel(
 
     # fix parameters to predictive_model
     ilayer = 1
-    for layer in model.forecast.network
+    for layer in model.forecast.networks[1]
         if has_params(layer)
             for p in Flux.params(layer.weight)
                 p .= value.(predictive_model_vars[ilayer][:W])
@@ -159,6 +174,6 @@ function solve_bilevel(
 
     return Solution(
         objective_value(bilevel_model), 
-        extract_flux_params(model.forecast.network)
+        extract_params(model.forecast)
     )
 end

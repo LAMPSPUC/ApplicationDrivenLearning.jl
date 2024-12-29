@@ -89,8 +89,8 @@ function compute_cost(
     if n_workers == 1
         for t=1:T
             result = _compute_step(Y[t, :], Yhat[t, :])
-            C += result[1]
-            dC .+= result[2]
+            C += result[1] ./ T
+            dC .+= result[2] ./ T
         end
 
     # main loop - parallel

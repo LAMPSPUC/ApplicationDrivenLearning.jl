@@ -175,6 +175,8 @@ function train!(
     elseif options.mode == GradientMPIMode
         return train_with_gradient_mpi!(model, X, y, options.params)
     elseif options.mode == BilevelMode
+        assert_msg = "BilevelMode not implemented for multiple forecasting models"
+        @assert length(model.forecast.networks) == 1 assert_msg
         return solve_bilevel(model, X, y, options.params)
     else
         # should never get here
