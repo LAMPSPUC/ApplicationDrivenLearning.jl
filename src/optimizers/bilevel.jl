@@ -12,6 +12,7 @@ function solve_bilevel(
 
     # extract params
     optimizer = get(params, :optimizer, nothing)
+    silent = get(params, :silent, false)
     mode = get(params, :mode, nothing)
 
     # create bilevel model
@@ -19,6 +20,11 @@ function solve_bilevel(
         optimizer,
         mode=mode
     )
+
+    # silence jump model
+    if silent
+        set_silent(bilevel_model)
+    end
 
     # parameters
     T = size(Y, 1)
