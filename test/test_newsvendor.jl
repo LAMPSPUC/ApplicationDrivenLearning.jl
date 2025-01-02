@@ -45,7 +45,8 @@ nn = Chain(
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.BilevelMode, 
         optimizer=HiGHS.Optimizer,
-        mode=BilevelJuMP.FortunyAmatMcCarlMode(primal_big_M=100, dual_big_M=100)
+        mode=BilevelJuMP.FortunyAmatMcCarlMode(primal_big_M=100, dual_big_M=100),
+        silent=true
     )
     sol = ApplicationDrivenLearning.train!(model, X, Y, opt)
     @test sol.params[1] ≈ best_decision atol=1e-2
