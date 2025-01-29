@@ -73,7 +73,7 @@ function train_with_gradient_mpi!(
                     (v) -> compute_cost_and_gradients(v[1], v[2], true), 
                     [[curr_θ, i] for i in batches[epoch, :]]
                 )
-                dCdy = sum([r[2] for r in pmap_result_with_gradients])
+                dCdy = sum([r[2] for r in pmap_result_with_gradients]) ./ batch_size
 
                 if compute_full_cost
                     # broadcast `is_done = false` again
@@ -84,7 +84,7 @@ function train_with_gradient_mpi!(
                         (v) -> compute_cost_and_gradients(v[1], v[2], false), 
                         [[curr_θ, i] for i=1:T]
                     )
-                    curr_C = sum([r[1] for r in pmap_result_without_gradients])
+                    curr_C = sum([r[1] for r in pmap_result_without_gradients]) ./ T
                 end
             
             else
@@ -94,8 +94,8 @@ function train_with_gradient_mpi!(
                     (v) -> compute_cost_and_gradients(v[1], v[2], true), 
                     [[curr_θ, i] for i=1:T]
                 )
-                curr_C = sum([r[1] for r in pmap_result])
-                dCdy = sum([r[2] for r in pmap_result])
+                curr_C = sum([r[1] for r in pmap_result]) ./ T
+                dCdy = sum([r[2] for r in pmap_result]) ./ T
             end
 
             if compute_full_cost

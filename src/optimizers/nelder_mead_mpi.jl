@@ -12,12 +12,15 @@ function train_with_nelder_mead_mpi!(
     JQM.mpi_init()
 
     # extract params
+    mpi_finalize = get(params, :mpi_finalize, true)
+    delete!(params, :mpi_finalize)
     optim_options = Optim.Options(;params...)
     
     is_done = false
     res = nothing
     final_sol = []
     final_cost = 0.0
+    T = size(X)[1]
     function compute_cost(θ, i)
         apply_params(model.forecast, θ)
         yhat = model.forecast(X[i,:])
@@ -31,8 +34,8 @@ function train_with_nelder_mead_mpi!(
         initial_sol = extract_params(model.forecast)
         res = Optim.optimize(initial_sol, NelderMead(), optim_options) do θ
             MPI.bcast(is_done, MPI.COMM_WORLD)
-            c_θ = JQM.pmap((v) -> compute_cost(v[1], v[2]), [[θ, i] for i in eachindex(X)])
-            return sum(c_θ)
+            c_θ = JQM.pmap((v) -> compute_cost(v[1], v[2]), [[θ, i] for i=1:T])
+            return sum(c_θ) ./ T
         end
 
         # print solution
@@ -62,7 +65,9 @@ function train_with_nelder_mead_mpi!(
     end
 
     JQM.mpi_barrier()
-    JQM.mpi_finalize()
+    if mpi_finalize
+        JQM.mpi_finalize()
+    end
 
     return Solution(final_cost, final_sol)
 end
