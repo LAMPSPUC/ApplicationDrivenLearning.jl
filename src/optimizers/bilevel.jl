@@ -95,7 +95,7 @@ function solve_bilevel(
     low_obj = sum([
         value(x -> low_var_map[x][t], pre_obj_func)
         for t=1:T
-    ])
+    ]) / T
     @objective(Lower(bilevel_model), pre_obj_sense, low_obj)
 
     # upper model objective
@@ -104,7 +104,7 @@ function solve_bilevel(
     up_obj = sum([
         value(x -> up_var_map[x][t], post_obj_func)
         for t=1:T
-    ])
+    ]) / T
     @objective(Upper(bilevel_model), post_obj_sense, up_obj)
 
     # fix upper model observations
