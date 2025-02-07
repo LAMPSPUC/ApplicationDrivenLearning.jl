@@ -31,8 +31,10 @@ function train_with_gradient!(
     batch_size = get(params, :batch_size, -1)
     verbose = get(params, :verbose, true)
     compute_cost_every = get(params, :compute_cost_every, 1)
+    time_limit = get(params, :time_limit, Inf)
 
     # init parameters
+    start_time = time()
     T = size(X)[1]
     best_C = Inf
     best_θ = extract_params(model.forecast)
@@ -68,6 +70,11 @@ function train_with_gradient!(
             if C <= best_C
                 best_C = C
                 best_θ = extract_params(model.forecast)
+            end
+
+            # check time limit reach
+            if time() - start_time > time_limit
+                break
             end
         end
 
