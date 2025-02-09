@@ -13,12 +13,14 @@ function compute_single_step_cost(
         yhat
     )
     optimize!(model.plan)
+    @assert termination_status(model.plan) == MOI.OPTIMAL "Optimization failed for PLAN model"
     fix.(assess_forecast_vars(model), y; force=true)
     set_normalized_rhs.(
         model.assess[:assess_policy_fix], 
         value.(plan_policy_vars(model))
     )
     optimize!(model.assess)
+    @assert termination_status(model.assess) == MOI.OPTIMAL "Optimization failed for ASSESS model"
     return objective_value(model.assess)
 end
 
