@@ -71,11 +71,11 @@ function train_with_gradient!(
                 best_C = C
                 best_θ = extract_params(model.forecast)
             end
+        end
 
-            # check time limit reach
-            if time() - start_time > time_limit
-                break
-            end
+        # check time limit reach
+        if time() - start_time > time_limit
+            break
         end
 
         # take gradient step

@@ -17,10 +17,12 @@ function train_with_gradient_mpi!(
     verbose = get(params, :verbose, true)
     compute_cost_every = get(params, :compute_cost_every, 1)
     mpi_finalize = get(params, :mpi_finalize, true)
+    time_limit = get(params, :time_limit, Inf)
 
     JQM.mpi_init()
     
     # init parameters
+    start_time = time()
     is_done = false
     best_C = Inf
     best_θ = []
@@ -111,7 +113,12 @@ function train_with_gradient_mpi!(
                     best_θ = curr_θ
                 end
             end
-    
+            
+            # check time limit reach
+            if time() - start_time > time_limit
+                break
+            end
+
             # take gradient step (if not last epoch)
             apply_gradient!(model.forecast, dCdy, epochx, rule)
         end
