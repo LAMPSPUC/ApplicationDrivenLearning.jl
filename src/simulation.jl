@@ -1,12 +1,18 @@
 using Distributed
 
-function compute_single_step_cost(model::Model, y::Vector{<:Real}, yhat::Vector{<:Real})
-
+function compute_single_step_cost(
+    model::Model,
+    y::Vector{<:Real},
+    yhat::Vector{<:Real},
+)
     MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat)
     optimize!(model.plan)
     @assert termination_status(model.plan) == MOI.OPTIMAL "Optimization failed for PLAN model"
     fix.(assess_forecast_vars(model), y; force = true)
-    set_normalized_rhs.(model.assess[:assess_policy_fix], value.(plan_policy_vars(model)))
+    set_normalized_rhs.(
+        model.assess[:assess_policy_fix],
+        value.(plan_policy_vars(model)),
+    )
     optimize!(model.assess)
     @assert termination_status(model.assess) == MOI.OPTIMAL "Optimization failed for ASSESS model"
     return objective_value(model.assess)
@@ -31,7 +37,11 @@ function compute_single_step_gradient(
     end
     DiffOpt.reverse_differentiate!(model.plan)
     for j = 1:size(model.forecast_vars, 1)
-        dCdy[j] = MOI.get(model.plan, POI.ReverseParameter(), model.plan_forecast_params[j])
+        dCdy[j] = MOI.get(
+            model.plan,
+            POI.ReverseParameter(),
+            model.plan_forecast_params[j],
+        )
     end
 
     return dCdy
@@ -43,12 +53,14 @@ end
 Compute the cost function (C) based on the model predictions and the true values.
 
 ...
+
 # Arguments
-- `model::ApplicationDrivenLearning.Model`: model to evaluate.
-- `X::Matrix{<:Real}`: input data.
-- `Y::Matrix{<:Real}`: true values.
-- `with_gradients::Bool=false`: flag to compute and return gradients.
-...
+
+  - `model::ApplicationDrivenLearning.Model`: model to evaluate.
+  - `X::Matrix{<:Real}`: input data.
+  - `Y::Matrix{<:Real}`: true values.
+  - `with_gradients::Bool=false`: flag to compute and return gradients.
+    ...
 """
 function compute_cost(
     model::Model,
@@ -103,7 +115,8 @@ function compute_cost(
         end
 
         # parallel computation
-        result = pmap(_compute_step, [Y[t, :] for t = 1:T], [Yhat[t, :] for t = 1:T])
+        result =
+            pmap(_compute_step, [Y[t, :] for t = 1:T], [Yhat[t, :] for t = 1:T])
         C = sum([r[1] for r in result])
         dC = sum([r[2] for r in result])
 
@@ -115,5 +128,4 @@ function compute_cost(
         return C, dC
     end
     return C
-
 end

@@ -3,7 +3,6 @@ import ParametricOptInterface as POI
 using MPI
 import JobQueueMPI as JQM
 
-
 function train_with_gradient_mpi!(
     model::Model,
     X::Matrix{<:Real},
@@ -52,7 +51,6 @@ function train_with_gradient_mpi!(
         end
 
         return step_cost, step_grad
-
     end
 
     # call optim as the controller
@@ -75,7 +73,8 @@ function train_with_gradient_mpi!(
                     (v) -> compute_cost_and_gradients(v[1], v[2], true),
                     [[curr_θ, i] for i in batches[epoch, :]],
                 )
-                dCdy = sum([r[2] for r in pmap_result_with_gradients]) ./ batch_size
+                dCdy =
+                    sum([r[2] for r in pmap_result_with_gradients]) ./ batch_size
 
                 if compute_full_cost
                     # broadcast `is_done = false` again
@@ -83,10 +82,12 @@ function train_with_gradient_mpi!(
 
                     # compute full cost
                     pmap_result_without_gradients = JQM.pmap(
-                        (v) -> compute_cost_and_gradients(v[1], v[2], false),
+                        (v) ->
+                            compute_cost_and_gradients(v[1], v[2], false),
                         [[curr_θ, i] for i = 1:T],
                     )
-                    curr_C = sum([r[1] for r in pmap_result_without_gradients]) ./ T
+                    curr_C =
+                        sum([r[1] for r in pmap_result_without_gradients]) ./ T
                 end
 
             else

@@ -8,7 +8,6 @@ function train_with_nelder_mead_mpi!(
     Y::Matrix{<:Real},
     params::Dict{Symbol,Any},
 )
-
     JQM.mpi_init()
 
     # extract params
@@ -34,7 +33,10 @@ function train_with_nelder_mead_mpi!(
         initial_sol = extract_params(model.forecast)
         res = Optim.optimize(initial_sol, NelderMead(), optim_options) do θ
             MPI.bcast(is_done, MPI.COMM_WORLD)
-            c_θ = JQM.pmap((v) -> compute_cost(v[1], v[2]), [[θ, i] for i = 1:T])
+            c_θ = JQM.pmap(
+                (v) -> compute_cost(v[1], v[2]),
+                [[θ, i] for i = 1:T],
+            )
             return sum(c_θ) ./ T
         end
 
@@ -61,7 +63,6 @@ function train_with_nelder_mead_mpi!(
             end
             JQM.pmap((v) -> compute_cost(v[1], v[2]), [])
         end
-
     end
 
     JQM.mpi_barrier()

@@ -1,7 +1,8 @@
 using Flux
 
 """
-Compute assess cost and cost gradient (with respect to predicted values) based on incomplete batch of examples.
+Compute assess cost and cost gradient (with respect to predicted values) based
+on incomplete batch of examples.
 """
 function stochastic_compute(model, X, Y, batch, compute_full_cost::Bool)
     C, dC = compute_cost(model, X[batch, :], Y[batch, :], true)
@@ -12,7 +13,8 @@ function stochastic_compute(model, X, Y, batch, compute_full_cost::Bool)
 end
 
 """
-Compute assess cost and cost gradient (with respect to predicted values) based on complete batch of examples.
+Compute assess cost and cost gradient (with respect to predicted values) based
+on complete batch of examples.
 """
 function deterministic_compute(model, X, Y)
     C, dC = compute_cost(model, X, Y, true)
@@ -53,7 +55,13 @@ function train_with_gradient!(
 
         if stochastic
             epochx = X[batches[epoch, :], :]
-            C, dC = stochastic_compute(model, X, Y, batches[epoch, :], compute_full_cost)
+            C, dC = stochastic_compute(
+                model,
+                X,
+                Y,
+                batches[epoch, :],
+                compute_full_cost,
+            )
         else
             epochx = X
             C, dC = deterministic_compute(model, X, Y)
@@ -80,7 +88,6 @@ function train_with_gradient!(
 
         # take gradient step
         apply_gradient!(model.forecast, dC, epochx, rule)
-
     end
 
     # fix best model

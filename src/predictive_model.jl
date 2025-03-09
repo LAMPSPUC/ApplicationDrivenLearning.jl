@@ -9,15 +9,19 @@ Creates a predictive (forecast) model for the AppDrivenLearning module
 from Flux models and input/output information.
 
 ...
+
 # Arguments
-- `networks`: array of Flux models to be used.
-- `input_output_map::Vector{Dict{Vector{Int}, Vector{Int}}}`: array in the same
-ordering as networks of mappings from input indexes to output indexes on which
-the models should be applied.
-- `input_size::Int`: size of the input vector.
-- `output_size::Int`: size of the output vector.
-...
+
+  - `networks`: array of Flux models to be used.
+  - `input_output_map::Vector{Dict{Vector{Int}, Vector{Int}}}`: array in the
+    same ordering as networks of mappings from input indexes to output indexes
+    on which the models should be applied.
+  - `input_size::Int`: size of the input vector.
+  - `output_size::Int`: size of the output vector.
+    ...
+
 # Example
+
 ```
 julia> pred_model = PredictiveModel(
         [Flux.Dense(1 => 1), Flux.Dense(3 => 2)],
@@ -42,7 +46,12 @@ struct PredictiveModel
         input_size::Int,
         output_size::Int,
     )
-        return new(deepcopy(networks), input_output_map, input_size, output_size)
+        return new(
+            deepcopy(networks),
+            input_output_map,
+            input_size,
+            output_size,
+        )
     end
 end
 
@@ -56,7 +65,12 @@ function PredictiveModel(network::Flux.Chain)
     input_size = size(network[1].weight)[2]
     output_size = size(network[end].weight)[1]
     input_output_map = [Dict(collect(1:input_size) => collect(1:output_size))]
-    return PredictiveModel([deepcopy(network)], input_output_map, input_size, output_size)
+    return PredictiveModel(
+        [deepcopy(network)],
+        input_output_map,
+        input_size,
+        output_size,
+    )
 end
 
 """
@@ -69,7 +83,12 @@ function PredictiveModel(network::Flux.Dense)
     input_size = size(network.weight)[2]
     output_size = size(network.weight)[1]
     input_output_map = [Dict(collect(1:input_size) => collect(1:output_size))]
-    return PredictiveModel([deepcopy(network)], input_output_map, input_size, output_size)
+    return PredictiveModel(
+        [deepcopy(network)],
+        input_output_map,
+        input_size,
+        output_size,
+    )
 end
 
 """
@@ -146,7 +165,10 @@ end
 
 function (model::PredictiveModel)(x::AbstractVector)
     n_networks = length(model.networks)
-    yhat = Zygote.Buffer(Vector{eltype(x)}(undef, model.output_size), model.output_size)
+    yhat = Zygote.Buffer(
+        Vector{eltype(x)}(undef, model.output_size),
+        model.output_size,
+    )
     for inn = 1:n_networks
         io_map = model.input_output_map[inn]
         nn = model.networks[inn]
@@ -181,12 +203,14 @@ end
 Apply a gradient vector to the model parameters.
 
 ...
+
 # Arguments
-- `model::PredictiveModel`: model to be updated.
-- `dCdy::Vector{<:Real}`: gradient vector.
-- `X::Matrix{<:Real}`: input data.
-- `optimizer`: Optimiser to be used.
-...
+
+  - `model::PredictiveModel`: model to be updated.
+  - `dCdy::Vector{<:Real}`: gradient vector.
+  - `X::Matrix{<:Real}`: input data.
+  - `optimizer`: Optimiser to be used.
+    ...
 """
 function apply_gradient!(
     model::PredictiveModel,
@@ -197,5 +221,5 @@ function apply_gradient!(
     ps = Flux.params(model.networks)
     loss(x, y) = mean(dCdy'model(x))
     train_data = [(X', 0.0)]
-    Flux.train!(loss, ps, train_data, optimizer)
+    return Flux.train!(loss, ps, train_data, optimizer)
 end

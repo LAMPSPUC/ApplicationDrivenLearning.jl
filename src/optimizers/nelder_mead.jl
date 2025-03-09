@@ -24,7 +24,10 @@ function train_with_nelder_mead!(
     res = Optim.optimize(
         fitness,
         initial_sol,
-        NelderMead(; parameters = parameters, initial_simplex = initial_simplex),
+        NelderMead(;
+            parameters = parameters,
+            initial_simplex = initial_simplex,
+        ),
         optim_options,
     )
     # update model parameters
