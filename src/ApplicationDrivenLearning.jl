@@ -22,7 +22,7 @@ struct Policy{T}
 end
 
 +(p1::Policy, p2::Policy) = Policy(p1.plan + p2.plan, p1.assess + p2.assess)
-*(c::Number, p::Policy) = Policy(c*p.plan, c*p.assess)
+*(c::Number, p::Policy) = Policy(c * p.plan, c * p.assess)
 
 """
     Forecast{T}
@@ -35,7 +35,7 @@ struct Forecast{T}
 end
 
 +(p1::Forecast, p2::Forecast) = Forecast(p1.plan + p2.plan, p1.assess + p2.assess)
-*(c::Number, p::Forecast) = Forecast(c*p.plan, c*p.assess)
+*(c::Number, p::Forecast) = Forecast(c * p.plan, c * p.assess)
 
 """
     Model <: JuMP.AbstractModel
@@ -46,7 +46,7 @@ missing forecast model and default settings.
 mutable struct Model <: JuMP.AbstractModel
     plan::JuMP.Model
     assess::JuMP.Model
-    forecast::Union{PredictiveModel, Nothing}
+    forecast::Union{PredictiveModel,Nothing}
 
     # variable arrays
     policy_vars::Vector{Policy}
@@ -62,9 +62,14 @@ mutable struct Model <: JuMP.AbstractModel
         assess = JuMP.Model()
 
         return new(
-            plan, assess, nothing,
-            Vector{Policy}(), Vector{Forecast}(), Vector{JuMP.VariableRef}(),
-            Dict{Symbol,Any}(), false
+            plan,
+            assess,
+            nothing,
+            Vector{Policy}(),
+            Vector{Forecast}(),
+            Vector{JuMP.VariableRef}(),
+            Dict{Symbol,Any}(),
+            false,
         )
     end
 end
@@ -102,8 +107,8 @@ Sets Chain, Dense or custom PredictiveModel object as
 forecast model.
 """
 function set_forecast_model(
-    model::Model, 
-    network::Union{PredictiveModel, Flux.Chain, Flux.Dense}
+    model::Model,
+    network::Union{PredictiveModel,Flux.Chain,Flux.Dense},
 )
     if typeof(network) == PredictiveModel
         forecast = network
@@ -131,13 +136,13 @@ function build_plan_model_forecast_params(model::Model)
     # adds parametrized forecast variables using MOI.Parameter
     forecast_size = size(model.forecast_vars)[1]
     model.plan_forecast_params = @variable(
-        model.plan, 
+        model.plan,
         _forecast[1:forecast_size] in MOI.Parameter.(zeros(forecast_size))
     )
     # fixes old and new prediction variables together
     @constraint(
-        model.plan, 
-        plan_forecast_fix, 
+        model.plan,
+        plan_forecast_fix,
         model.plan_forecast_params .== plan_forecast_vars(model)
     )
 end
@@ -146,11 +151,7 @@ end
 Creates new constraint to assess model that fixes policy variables.
 """
 function build_assess_model_policy_constraint(model::Model)
-    @constraint(
-        model.assess, 
-        assess_policy_fix, 
-        assess_policy_vars(model) .== 0
-    )
+    @constraint(model.assess, assess_policy_fix, assess_policy_vars(model) .== 0)
 end
 
 """
@@ -183,12 +184,7 @@ include("optimizers/bilevel.jl")
 
 Train model using given data and options.
 """
-function train!(
-    model::Model, 
-    X::Matrix{<:Real}, 
-    y::Matrix{<:Real}, 
-    options::Options,
-)
+function train!(model::Model, X::Matrix{<:Real}, y::Matrix{<:Real}, options::Options)
     if options.mode == NelderMeadMode
         return train_with_nelder_mead!(model, X, y, options.params)
     elseif options.mode == GradientMode
@@ -207,8 +203,14 @@ function train!(
     end
 end
 
-export Model, PredictiveModel, Plan, Assess,
-    Policy, Forecast,
-    set_forecast_model, forecast, 
-    compute_cost, train!
+export Model,
+    PredictiveModel,
+    Plan,
+    Assess,
+    Policy,
+    Forecast,
+    set_forecast_model,
+    forecast,
+    compute_cost,
+    train!
 end

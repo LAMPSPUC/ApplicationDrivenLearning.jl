@@ -31,16 +31,16 @@ julia> pred_model = PredictiveModel(
 ```
 """
 struct PredictiveModel
-    networks
-    input_output_map::Vector{Dict{Vector{Int}, Vector{Int}}}
+    networks::Any
+    input_output_map::Vector{Dict{Vector{Int},Vector{Int}}}
     input_size::Int
     output_size::Int
-    
+
     function PredictiveModel(
         networks,
-        input_output_map::Vector{Dict{Vector{Int}, Vector{Int}}},
+        input_output_map::Vector{Dict{Vector{Int},Vector{Int}}},
         input_size::Int,
-        output_size::Int
+        output_size::Int,
     )
         return new(deepcopy(networks), input_output_map, input_size, output_size)
     end
@@ -52,9 +52,7 @@ end
 When only one network is passed as a Chain object, input and output
 indexes are directly extracted.
 """
-function PredictiveModel(
-    network::Flux.Chain
-)
+function PredictiveModel(network::Flux.Chain)
     input_size = size(network[1].weight)[2]
     output_size = size(network[end].weight)[1]
     input_output_map = [Dict(collect(1:input_size) => collect(1:output_size))]
@@ -67,9 +65,7 @@ end
 When only one network is passed as a Dense object, input and output
 indexes are directly extracted.
 """
-function PredictiveModel(
-    network::Flux.Dense
-)
+function PredictiveModel(network::Flux.Dense)
     input_size = size(network.weight)[2]
     output_size = size(network.weight)[1]
     input_output_map = [Dict(collect(1:input_size) => collect(1:output_size))]
@@ -84,7 +80,7 @@ input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Chain,
-    input_output_map::Dict{Vector{Int}, Vector{Int}}
+    input_output_map::Dict{Vector{Int},Vector{Int}},
 )
     param_layers = [layer for layer in network if has_params(layer)]
     network_input_size = size(param_layers[1].weight, 2)
@@ -93,10 +89,15 @@ function PredictiveModel(
         @assert length(input_idx) == network_input_size "Input indexes length must match model input size."
         @assert length(output_idx) == network_output_size "Output indexes length must match model output size."
     end
-    
+
     model_input_size = maximum(maximum.(keys(input_output_map)))
     model_output_size = maximum(maximum.(values(input_output_map)))
-    return PredictiveModel([deepcopy(network)], [input_output_map], model_input_size, model_output_size)
+    return PredictiveModel(
+        [deepcopy(network)],
+        [input_output_map],
+        model_input_size,
+        model_output_size,
+    )
 end
 
 """
@@ -107,7 +108,7 @@ input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Dense,
-    input_output_map::Dict{Vector{Int}, Vector{Int}}
+    input_output_map::Dict{Vector{Int},Vector{Int}},
 )
     network_input_size = size(network.weight)[2]
     network_output_size = size(network.weight)[1]
@@ -115,10 +116,15 @@ function PredictiveModel(
         @assert length(input_idx) == network_input_size "Input indexes length must match model input size."
         @assert length(output_idx) == network_output_size "Output indexes length must match model output size."
     end
-    
+
     model_input_size = maximum(maximum.(keys(input_output_map)))
     model_output_size = maximum(maximum.(values(input_output_map)))
-    return PredictiveModel([deepcopy(network)], [input_output_map], model_input_size, model_output_size)
+    return PredictiveModel(
+        [deepcopy(network)],
+        [input_output_map],
+        model_input_size,
+        model_output_size,
+    )
 end
 
 function (model::PredictiveModel)(X::AbstractMatrix)
@@ -126,9 +132,9 @@ function (model::PredictiveModel)(X::AbstractMatrix)
     n_networks = length(model.networks)
     Yhat = Zygote.Buffer(
         Matrix{eltype(X)}(undef, model.output_size, pred_size),
-        (model.output_size, pred_size)
+        (model.output_size, pred_size),
     )
-    for inn=1:n_networks
+    for inn = 1:n_networks
         io_map = model.input_output_map[inn]
         nn = model.networks[inn]
         for (input_idx, output_idx) in io_map
@@ -138,13 +144,10 @@ function (model::PredictiveModel)(X::AbstractMatrix)
     return copy(Yhat)
 end
 
-function (model::PredictiveModel)(x::AbstractVector) 
+function (model::PredictiveModel)(x::AbstractVector)
     n_networks = length(model.networks)
-    yhat = Zygote.Buffer(
-        Vector{eltype(x)}(undef, model.output_size),
-        model.output_size
-    )
-    for inn=1:n_networks
+    yhat = Zygote.Buffer(Vector{eltype(x)}(undef, model.output_size), model.output_size)
+    for inn = 1:n_networks
         io_map = model.input_output_map[inn]
         nn = model.networks[inn]
         for (input_idx, output_idx) in io_map
@@ -186,10 +189,10 @@ Apply a gradient vector to the model parameters.
 ...
 """
 function apply_gradient!(
-    model::PredictiveModel, 
+    model::PredictiveModel,
     dCdy::Vector{<:Real},
     X::Matrix{<:Real},
-    optimizer
+    optimizer,
 )
     ps = Flux.params(model.networks)
     loss(x, y) = mean(dCdy'model(x))

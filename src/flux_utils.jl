@@ -5,7 +5,7 @@ using Flux
 
 Extract the parameters of a Flux model (Flux.Chain or Flux.Dense) into a single vector.
 """
-function extract_flux_params(model::Union{Flux.Chain, Flux.Dense})
+function extract_flux_params(model::Union{Flux.Chain,Flux.Dense})
     θ = Flux.params(model)
     return reduce(vcat, [vec(p) for p in θ])
 end
@@ -15,7 +15,10 @@ end
 
 Return model after fixing the parameters from an adequate vector of parameters.
 """
-function fix_flux_params_single_model(model::Union{Flux.Chain, Flux.Dense}, θ::Vector{<:Real})
+function fix_flux_params_single_model(
+    model::Union{Flux.Chain,Flux.Dense},
+    θ::Vector{<:Real},
+)
     i = 1
     for p in Flux.params(model)
         psize = prod(size(p))
@@ -30,10 +33,7 @@ end
 
 Return iterable of models after fixing the parameters from an adequate vector of parameters.
 """
-function fix_flux_params_multi_model(
-    models, 
-    θ::Vector{<:Real}
-)
+function fix_flux_params_multi_model(models, θ::Vector{<:Real})
     i = 1
     for model in models
         for p in Flux.params(model)

@@ -19,11 +19,11 @@ function deterministic_compute(model, X, Y)
     return C, dC
 end
 
-function train_with_gradient!(  
+function train_with_gradient!(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
-    params::Dict{Symbol, Any}
+    params::Dict{Symbol,Any},
 )
     # extract params
     rule = get(params, :rule, Flux.Descent())
@@ -40,15 +40,15 @@ function train_with_gradient!(
     best_θ = extract_params(model.forecast)
     trace = Array{Float64}(undef, epochs)
     stochastic = batch_size > 0
-    
+
     # precompute batches
-    batches = repeat(1:T, outer=(1, epochs))'
+    batches = repeat(1:T, outer = (1, epochs))'
     if stochastic
         batches = rand(1:T, (epochs, batch_size))
     end
 
     # main loop
-    for epoch=1:epochs
+    for epoch = 1:epochs
         compute_full_cost = epoch % compute_cost_every == 0
 
         if stochastic
@@ -58,7 +58,7 @@ function train_with_gradient!(
             epochx = X
             C, dC = deterministic_compute(model, X, Y)
         end
-        
+
         if compute_full_cost
             # store and print cost
             trace[epoch] = C

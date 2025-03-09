@@ -8,7 +8,7 @@ function train_with_gradient_mpi!(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
-    params::Dict{Symbol, Any}
+    params::Dict{Symbol,Any},
 )
     # extract params
     rule = get(params, :rule, Flux.Descent())
@@ -20,7 +20,7 @@ function train_with_gradient_mpi!(
     time_limit = get(params, :time_limit, Inf)
 
     JQM.mpi_init()
-    
+
     # init parameters
     start_time = time()
     is_done = false
@@ -33,9 +33,9 @@ function train_with_gradient_mpi!(
     T = size(X)[1]
     stochastic = batch_size > 0
     compute_full_cost = true
-    
+
     # precompute batches
-    batches = repeat(1:T, outer=(1, epochs))'
+    batches = repeat(1:T, outer = (1, epochs))'
     if stochastic
         batches = rand(1:T, (epochs, batch_size))
     end
@@ -44,22 +44,22 @@ function train_with_gradient_mpi!(
     function compute_cost_and_gradients(θ, i, compute_gradient::Bool)
         apply_params(model.forecast, θ)
         yhat = model.forecast(X[i, :])
-        step_cost = compute_single_step_cost(model, Y[i, :], yhat)        
+        step_cost = compute_single_step_cost(model, Y[i, :], yhat)
         if compute_gradient
             step_grad = compute_single_step_gradient(model, dCdz, dCdy)
         else
             step_grad = nothing
         end
-              
+
         return step_cost, step_grad
-        
+
     end
 
     # call optim as the controller
     if JQM.is_controller_process()
 
         # main loop
-        for epoch=1:epochs
+        for epoch = 1:epochs
             compute_full_cost = epoch % compute_cost_every == 0
 
             # broadcast `is_done = false`
@@ -72,8 +72,8 @@ function train_with_gradient_mpi!(
                 epochx = X[batches[epoch, :], :]
                 # compute stochastic gradient
                 pmap_result_with_gradients = JQM.pmap(
-                    (v) -> compute_cost_and_gradients(v[1], v[2], true), 
-                    [[curr_θ, i] for i in batches[epoch, :]]
+                    (v) -> compute_cost_and_gradients(v[1], v[2], true),
+                    [[curr_θ, i] for i in batches[epoch, :]],
                 )
                 dCdy = sum([r[2] for r in pmap_result_with_gradients]) ./ batch_size
 
@@ -83,18 +83,18 @@ function train_with_gradient_mpi!(
 
                     # compute full cost
                     pmap_result_without_gradients = JQM.pmap(
-                        (v) -> compute_cost_and_gradients(v[1], v[2], false), 
-                        [[curr_θ, i] for i=1:T]
+                        (v) -> compute_cost_and_gradients(v[1], v[2], false),
+                        [[curr_θ, i] for i = 1:T],
                     )
                     curr_C = sum([r[1] for r in pmap_result_without_gradients]) ./ T
                 end
-            
+
             else
                 epochx = X
                 # compute full cost and gradient
                 pmap_result = JQM.pmap(
-                    (v) -> compute_cost_and_gradients(v[1], v[2], true), 
-                    [[curr_θ, i] for i=1:T]
+                    (v) -> compute_cost_and_gradients(v[1], v[2], true),
+                    [[curr_θ, i] for i = 1:T],
                 )
                 curr_C = sum([r[1] for r in pmap_result]) ./ T
                 dCdy = sum([r[2] for r in pmap_result]) ./ T
@@ -113,7 +113,7 @@ function train_with_gradient_mpi!(
                     best_θ = curr_θ
                 end
             end
-            
+
             # check time limit reach
             if time() - start_time > time_limit
                 break
@@ -122,11 +122,11 @@ function train_with_gradient_mpi!(
             # take gradient step (if not last epoch)
             apply_gradient!(model.forecast, dCdy, epochx, rule)
         end
-        
+
         # release workers
         is_done = true
         MPI.bcast(is_done, MPI.COMM_WORLD)
-    
+
     elseif JQM.is_worker_process()
         # continuoslly call pmap until controller is done
         while true

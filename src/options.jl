@@ -78,8 +78,8 @@ options = Options(
 ...
 """
 struct Options
-    mode
-    params::Dict{Symbol, Any}
+    mode::Any
+    params::Dict{Symbol,Any}
 
     function Options(mode; params...)
         if mode <: AbstractOptimizationMode
