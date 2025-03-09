@@ -5,19 +5,13 @@ function compute_single_step_cost(
     y::Vector{<:Real},
     yhat::Vector{<:Real},
 )
-
-    MOI.set.(
-        model.plan, 
-        POI.ParameterValue(), 
-        model.plan_forecast_params, 
-        yhat
-    )
+    MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat)
     optimize!(model.plan)
     @assert termination_status(model.plan) == MOI.OPTIMAL "Optimization failed for PLAN model"
-    fix.(assess_forecast_vars(model), y; force=true)
+    fix.(assess_forecast_vars(model), y; force = true)
     set_normalized_rhs.(
-        model.assess[:assess_policy_fix], 
-        value.(plan_policy_vars(model))
+        model.assess[:assess_policy_fix],
+        value.(plan_policy_vars(model)),
     )
     optimize!(model.assess)
     @assert termination_status(model.assess) == MOI.OPTIMAL "Optimization failed for ASSESS model"
@@ -30,23 +24,23 @@ Computes the gradient of the cost function (C) with respect to the predictions (
 function compute_single_step_gradient(
     model::Model,
     dCdz::Vector{<:Real},
-    dCdy::Vector{<:Real}
-)               
+    dCdy::Vector{<:Real},
+)
     dCdz .= dual.(model.assess[:assess_policy_fix])
-    for i=1:size(model.policy_vars, 1)
+    for i = 1:size(model.policy_vars, 1)
         MOI.set(
             model.plan,
             DiffOpt.ReverseVariablePrimal(),
             plan_policy_vars(model)[i],
-            dCdz[i]
+            dCdz[i],
         )
     end
     DiffOpt.reverse_differentiate!(model.plan)
-    for j=1:size(model.forecast_vars, 1)
+    for j = 1:size(model.forecast_vars, 1)
         dCdy[j] = MOI.get(
             model.plan,
             POI.ReverseParameter(),
-            model.plan_forecast_params[j]
+            model.plan_forecast_params[j],
         )
     end
 
@@ -59,19 +53,21 @@ end
 Compute the cost function (C) based on the model predictions and the true values.
 
 ...
+
 # Arguments
-- `model::ApplicationDrivenLearning.Model`: model to evaluate.
-- `X::Matrix{<:Real}`: input data.
-- `Y::Matrix{<:Real}`: true values.
-- `with_gradients::Bool=false`: flag to compute and return gradients.
-...
+
+  - `model::ApplicationDrivenLearning.Model`: model to evaluate.
+  - `X::Matrix{<:Real}`: input data.
+  - `Y::Matrix{<:Real}`: true values.
+  - `with_gradients::Bool=false`: flag to compute and return gradients.
+    ...
 """
 function compute_cost(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
-    with_gradients::Bool=false,
-    n_workers::Int=1
+    with_gradients::Bool = false,
+    n_workers::Int = 1,
 )
 
     # data size assertions
@@ -102,22 +98,25 @@ function compute_cost(
 
     # main loop - sequential
     if n_workers == 1
-        for t=1:T
+        for t = 1:T
             result = _compute_step(Y[t, :], Yhat[t, :])
             C += result[1] ./ T
             dC .+= result[2] ./ T
         end
 
-    # main loop - parallel
+        # main loop - parallel
     elseif n_workers > 1
-        
+
         # add workers and import package on first call
         if nprocs() < n_workers
-            error("Please add workers and import the AppDrivenLearning module @everywhere before calling `train!` function.")
+            error(
+                "Please add workers and import the AppDrivenLearning module @everywhere before calling `train!` function.",
+            )
         end
 
         # parallel computation
-        result = pmap(_compute_step, [Y[t, :] for t=1:T], [Yhat[t, :] for t=1:T])
+        result =
+            pmap(_compute_step, [Y[t, :] for t = 1:T], [Yhat[t, :] for t = 1:T])
         C = sum([r[1] for r in result])
         dC = sum([r[2] for r in result])
 
@@ -129,5 +128,4 @@ function compute_cost(
         return C, dC
     end
     return C
-
 end

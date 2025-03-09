@@ -11,29 +11,21 @@ function JuMP.build_variable(
     ::Type{Policy};
     kwargs...,
 )
-    return PolicyInfo(
-        info,
-        info,
-        kwargs
-    )
+    return PolicyInfo(info, info, kwargs)
 end
 
-function JuMP.add_variable(
-    model::Model, 
-    policy_info::PolicyInfo, 
-    name::String
-)
+function JuMP.add_variable(model::Model, policy_info::PolicyInfo, name::String)
     policy = Policy(
         JuMP.add_variable(
-            model.plan, 
-            JuMP.ScalarVariable(policy_info.plan), 
-            name * "_plan"
+            model.plan,
+            JuMP.ScalarVariable(policy_info.plan),
+            name * "_plan",
         ),
         JuMP.add_variable(
-            model.assess, 
-            JuMP.ScalarVariable(policy_info.assess), 
-            name * "_assess"
-        )
+            model.assess,
+            JuMP.ScalarVariable(policy_info.assess),
+            name * "_assess",
+        ),
     )
     push!(model.policy_vars, policy)
     return policy
@@ -52,29 +44,25 @@ function JuMP.build_variable(
     ::Type{Forecast};
     kwargs...,
 )
-    return ForecastInfo(
-        info,
-        info,
-        kwargs
-    )
+    return ForecastInfo(info, info, kwargs)
 end
 
 function JuMP.add_variable(
-    model::Model, 
-    forecast_info::ForecastInfo, 
-    name::String
+    model::Model,
+    forecast_info::ForecastInfo,
+    name::String,
 )
     forecast = Forecast(
         JuMP.add_variable(
-            model.plan, 
-            JuMP.ScalarVariable(forecast_info.plan), 
-            name * "_plan"
+            model.plan,
+            JuMP.ScalarVariable(forecast_info.plan),
+            name * "_plan",
         ),
         JuMP.add_variable(
-            model.assess, 
-            JuMP.ScalarVariable(forecast_info.assess), 
-            name * "_assess"
-        )
+            model.assess,
+            JuMP.ScalarVariable(forecast_info.assess),
+            name * "_assess",
+        ),
     )
     push!(model.forecast_vars, forecast)
     return forecast
@@ -100,11 +88,14 @@ end
 
 # jump functions
 function JuMP.objective_sense(model::Model)
-    @assert JuMP.objective_sense(model.plan) == JuMP.objective_sense(model.assess)
+    @assert JuMP.objective_sense(model.plan) ==
+            JuMP.objective_sense(model.assess)
     return JuMP.objective_sense(model.plan)
 end
 
-JuMP.num_variables(m::Model) = JuMP.num_variables(m.plan) + JuMP.num_variables(m.assess)
+function JuMP.num_variables(m::Model)
+    return JuMP.num_variables(m.plan) + JuMP.num_variables(m.assess)
+end
 
 function JuMP.show_constraints_summary(io::IO, model::Model)
     println("Plan Model:")
@@ -124,21 +115,22 @@ end
 
 JuMP.object_dictionary(model::Model) = model.obj_dict
 
-function JuMP.set_optimizer(model::Model, builder, evaluate_duals::Bool=true)
+function JuMP.set_optimizer(model::Model, builder, evaluate_duals::Bool = true)
     # set diffopt optimizer for plan model
     new_diff_optimizer = DiffOpt.diff_optimizer(builder)
     JuMP.set_optimizer(
         model.plan,
-        () -> POI.Optimizer(new_diff_optimizer; evaluate_duals=evaluate_duals)
+        () ->
+            POI.Optimizer(new_diff_optimizer; evaluate_duals = evaluate_duals),
     )
 
     # basic setting for assess model
-    JuMP.set_optimizer(model.assess, builder)
+    return JuMP.set_optimizer(model.assess, builder)
 end
 
 function JuMP.set_silent(model::Model)
     MOI.set(model.plan, MOI.Silent(), true)
-    MOI.set(model.assess, MOI.Silent(), true)
+    return MOI.set(model.assess, MOI.Silent(), true)
 end
 
 function JuMP.num_variables(model::Model)

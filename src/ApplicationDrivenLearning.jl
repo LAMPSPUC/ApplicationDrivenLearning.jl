@@ -1,12 +1,10 @@
 module ApplicationDrivenLearning
 
-
 using Flux
 using JuMP
 using DiffOpt
 import ParametricOptInterface as POI
 import Base.*, Base.+
-
 
 include("flux_utils.jl")
 include("predictive_model.jl")
@@ -22,7 +20,7 @@ struct Policy{T}
 end
 
 +(p1::Policy, p2::Policy) = Policy(p1.plan + p2.plan, p1.assess + p2.assess)
-*(c::Number, p::Policy) = Policy(c*p.plan, c*p.assess)
+*(c::Number, p::Policy) = Policy(c * p.plan, c * p.assess)
 
 """
     Forecast{T}
@@ -34,19 +32,21 @@ struct Forecast{T}
     assess::T
 end
 
-+(p1::Forecast, p2::Forecast) = Forecast(p1.plan + p2.plan, p1.assess + p2.assess)
-*(c::Number, p::Forecast) = Forecast(c*p.plan, c*p.assess)
+function +(p1::Forecast, p2::Forecast)
+    return Forecast(p1.plan + p2.plan, p1.assess + p2.assess)
+end
+*(c::Number, p::Forecast) = Forecast(c * p.plan, c * p.assess)
 
 """
     Model <: JuMP.AbstractModel
 
-Create an empty ApplicationDrivenLearning.Model with empty plan and assess models,
-missing forecast model and default settings.
+Create an empty ApplicationDrivenLearning.Model with empty plan and assess
+models, missing forecast model and default settings.
 """
 mutable struct Model <: JuMP.AbstractModel
     plan::JuMP.Model
     assess::JuMP.Model
-    forecast::Union{PredictiveModel, Nothing}
+    forecast::Union{PredictiveModel,Nothing}
 
     # variable arrays
     policy_vars::Vector{Policy}
@@ -62,9 +62,14 @@ mutable struct Model <: JuMP.AbstractModel
         assess = JuMP.Model()
 
         return new(
-            plan, assess, nothing,
-            Vector{Policy}(), Vector{Forecast}(), Vector{JuMP.VariableRef}(),
-            Dict{Symbol,Any}(), false
+            plan,
+            assess,
+            nothing,
+            Vector{Policy}(),
+            Vector{Forecast}(),
+            Vector{JuMP.VariableRef}(),
+            Dict{Symbol,Any}(),
+            false,
         )
     end
 end
@@ -102,8 +107,8 @@ Sets Chain, Dense or custom PredictiveModel object as
 forecast model.
 """
 function set_forecast_model(
-    model::Model, 
-    network::Union{PredictiveModel, Flux.Chain, Flux.Dense}
+    model::Model,
+    network::Union{PredictiveModel,Flux.Chain,Flux.Dense},
 )
     if typeof(network) == PredictiveModel
         forecast = network
@@ -111,7 +116,7 @@ function set_forecast_model(
         forecast = PredictiveModel(network)
     end
     @assert forecast.output_size == size(model.forecast_vars, 1)
-    model.forecast = forecast
+    return model.forecast = forecast
 end
 
 """
@@ -131,13 +136,13 @@ function build_plan_model_forecast_params(model::Model)
     # adds parametrized forecast variables using MOI.Parameter
     forecast_size = size(model.forecast_vars)[1]
     model.plan_forecast_params = @variable(
-        model.plan, 
+        model.plan,
         _forecast[1:forecast_size] in MOI.Parameter.(zeros(forecast_size))
     )
     # fixes old and new prediction variables together
     @constraint(
-        model.plan, 
-        plan_forecast_fix, 
+        model.plan,
+        plan_forecast_fix,
         model.plan_forecast_params .== plan_forecast_vars(model)
     )
 end
@@ -147,8 +152,8 @@ Creates new constraint to assess model that fixes policy variables.
 """
 function build_assess_model_policy_constraint(model::Model)
     @constraint(
-        model.assess, 
-        assess_policy_fix, 
+        model.assess,
+        assess_policy_fix,
         assess_policy_vars(model) .== 0
     )
 end
@@ -165,7 +170,7 @@ function build(model::Model)
 
     # build plan model
     build_plan_model_forecast_params(model)
-    build_assess_model_policy_constraint(model)
+    return build_assess_model_policy_constraint(model)
 end
 
 include("jump.jl")
@@ -184,9 +189,9 @@ include("optimizers/bilevel.jl")
 Train model using given data and options.
 """
 function train!(
-    model::Model, 
-    X::Matrix{<:Real}, 
-    y::Matrix{<:Real}, 
+    model::Model,
+    X::Matrix{<:Real},
+    y::Matrix{<:Real},
     options::Options,
 )
     if options.mode == NelderMeadMode
@@ -198,8 +203,8 @@ function train!(
     elseif options.mode == GradientMPIMode
         return train_with_gradient_mpi!(model, X, y, options.params)
     elseif options.mode == BilevelMode
-        assert_msg = "BilevelMode not implemented for multiple forecasting models"
-        @assert length(model.forecast.networks) == 1 assert_msg
+        asr_msg = "BilevelMode not implemented for multiple forecasting models"
+        @assert length(model.forecast.networks) == 1 asr_msg
         return solve_bilevel(model, X, y, options.params)
     else
         # should never get here
@@ -207,8 +212,14 @@ function train!(
     end
 end
 
-export Model, PredictiveModel, Plan, Assess,
-    Policy, Forecast,
-    set_forecast_model, forecast, 
-    compute_cost, train!
+export Model,
+    PredictiveModel,
+    Plan,
+    Assess,
+    Policy,
+    Forecast,
+    set_forecast_model,
+    forecast,
+    compute_cost,
+    train!
 end
