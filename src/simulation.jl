@@ -1,5 +1,3 @@
-using Distributed
-
 function compute_single_step_cost(
     model::Model,
     y::Vector{<:Real},
@@ -48,7 +46,7 @@ function compute_single_step_gradient(
 end
 
 """
-    compute_cost(model, X, Y, with_gradients=false, n_workers=1)
+    compute_cost(model, X, Y, with_gradients=false)
 
 Compute the cost function (C) based on the model predictions and the true values.
 
@@ -67,7 +65,6 @@ function compute_cost(
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     with_gradients::Bool = false,
-    n_workers::Int = 1,
 )
 
     # data size assertions
@@ -96,32 +93,11 @@ function compute_cost(
     # get predictions
     Yhat = model.forecast(X')'  # size=(T, output_size)
 
-    # main loop - sequential
-    if n_workers == 1
-        for t = 1:T
-            result = _compute_step(Y[t, :], Yhat[t, :])
-            C += result[1] ./ T
-            dC .+= result[2] ./ T
-        end
-
-        # main loop - parallel
-    elseif n_workers > 1
-
-        # add workers and import package on first call
-        if nprocs() < n_workers
-            error(
-                "Please add workers and import the AppDrivenLearning module @everywhere before calling `train!` function.",
-            )
-        end
-
-        # parallel computation
-        result =
-            pmap(_compute_step, [Y[t, :] for t = 1:T], [Yhat[t, :] for t = 1:T])
-        C = sum([r[1] for r in result])
-        dC = sum([r[2] for r in result])
-
-    else
-        error("Invalid number of workers")
+    # main loop to compute cost
+    for t = 1:T
+        result = _compute_step(Y[t, :], Yhat[t, :])
+        C += result[1] ./ T
+        dC .+= result[2] ./ T
     end
 
     if with_gradients
