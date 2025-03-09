@@ -1,4 +1,6 @@
-# ApplicationDrivenLearning.jl
+# ApplicationDrivenLearning.jl Documentation
+
+## Introduction
 
 ApplicationDrivenLearning.jl is a Julia package for training time series models using the application driven learning framework, that connects the optimization problem final cost with predictive model parameters in order to achieve the best model for a given application.
 
