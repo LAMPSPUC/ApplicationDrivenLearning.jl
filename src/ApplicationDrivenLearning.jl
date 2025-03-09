@@ -11,7 +11,11 @@ import Base.*, Base.+
 include("flux_utils.jl")
 include("predictive_model.jl")
 
-# special variable types
+"""
+    Policy{T}
+
+Policy variable type that holds plan and assess variables.
+"""
 struct Policy{T}
     plan::T
     assess::T
@@ -20,6 +24,11 @@ end
 +(p1::Policy, p2::Policy) = Policy(p1.plan + p2.plan, p1.assess + p2.assess)
 *(c::Number, p::Policy) = Policy(c*p.plan, c*p.assess)
 
+"""
+    Forecast{T}
+
+Forecast variable type that holds plan and assess variables.
+"""
 struct Forecast{T}
     plan::T
     assess::T
@@ -28,7 +37,12 @@ end
 +(p1::Forecast, p2::Forecast) = Forecast(p1.plan + p2.plan, p1.assess + p2.assess)
 *(c::Number, p::Forecast) = Forecast(c*p.plan, c*p.assess)
 
-# main model
+"""
+    Model <: JuMP.AbstractModel
+
+Create an empty ApplicationDrivenLearning.Model with empty plan and assess models,
+missing forecast model and default settings.
+"""
 mutable struct Model <: JuMP.AbstractModel
     plan::JuMP.Model
     assess::JuMP.Model
@@ -100,6 +114,11 @@ function set_forecast_model(
     model.forecast = forecast
 end
 
+"""
+    forecast(model, X)
+
+Return forecast model output for given input.
+"""
 function forecast(model::Model, X::AbstractMatrix)
     return model.forecast(X)
 end
@@ -159,7 +178,11 @@ include("optimizers/nelder_mead_mpi.jl")
 include("optimizers/gradient_mpi.jl")
 include("optimizers/bilevel.jl")
 
+"""
+    train!(model, X, y, options)
 
+Train model using given data and options.
+"""
 function train!(
     model::Model, 
     X::Matrix{<:Real}, 

@@ -80,11 +80,20 @@ function JuMP.add_variable(
     return forecast
 end
 
-# plan and assess models
+"""
+    Upper(model::ApplicationDrivenLearning.Model)
+
+Create a reference to the plan model of an application driven learning model.
+"""
 function Plan(model::Model)
     return model.plan::JuMP.Model
 end
 
+"""
+    Assess(model::ApplicationDrivenLearning.Model)
+
+Create a reference to the assess model of an application driven learning model.
+"""
 function Assess(model::Model)
     return model.assess::JuMP.Model
 end
