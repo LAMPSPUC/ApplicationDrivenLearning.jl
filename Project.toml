@@ -1,3 +1,8 @@
+name = "ApplicationDrivenLearning"
+uuid = "0856f1c8-ef17-4e14-9230-2773e47a789e"
+authors = ["giovanni "]
+version = "0.1.0"
+
 [deps]
 BilevelJuMP = "485130c0-026e-11ea-0f1a-6992cd14145c"
 DiffOpt = "930fe3bc-9c6b-11ea-2d94-6184641e85e7"
@@ -6,6 +11,7 @@ Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 HiGHS = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
 JobQueueMPI = "32d208e1-246e-420c-b6ff-18b71b410923"
 JuMP = "4076af6c-e467-56ae-b986-b466b2749572"
+JuliaFormatter = "98e50ef6-434e-11e9-1051-2b60c6c9e899"
 MPI = "da04e1cc-30fd-572f-bb4f-1f8673147195"
 NNlib = "872c559c-99b0-510c-b3b7-b6c96a88d5cd"
 Optim = "429524aa-4258-5aef-a3af-852621145aeb"
