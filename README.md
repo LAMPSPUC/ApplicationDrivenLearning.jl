@@ -2,6 +2,12 @@
 
 ApplicationDrivenLearning.jl is a Julia package for training time series models using the application driven learning framework, that connects the optimization problem final cost with predictive model parameters in order to achieve the best model for a given application.
 
+[![Build Status](https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl/actions?query=workflow%3ACI)
+
+[![codecov](https://codecov.io/gh/LAMPSPUC/ApplicationDrivenLearning.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/LAMPSPUC/ApplicationDrivenLearning.jl)
+ 
+[![dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://LAMPSPUC.github.io/ApplicationDrivenLearning.jl/dev/)
+
 ## Usage
 
 ```julia
