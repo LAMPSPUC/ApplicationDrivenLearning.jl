@@ -1,13 +1,14 @@
-using Documenter
+import Documenter
 
-push!(LOAD_PATH, "../src")
 using ApplicationDrivenLearning
 
-makedocs(;
-    modules = [ApplicationDrivenLearning],
-    doctest = false,
+Documenter.makedocs(;
     clean = true,
-    sitename = "ApplicationDrivenLearning.jl",
+    sitename = "ApplicationDrivenLearning.jl documentation",
     authors = "Giovanni Amorim, Joaquim Garcia",
-    pages = ["Home" => "index.md", "API Reference" => "reference.md"],
+)
+
+Documenter.deploydocs(;
+    repo = "github.com/LAMPSPUC/ApplicationDrivenLearning.jl.git",
+    push_preview = true,
 )
