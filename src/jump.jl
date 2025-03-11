@@ -117,11 +117,13 @@ JuMP.object_dictionary(model::Model) = model.obj_dict
 
 function JuMP.set_optimizer(model::Model, builder, evaluate_duals::Bool = true)
     # set diffopt optimizer for plan model
-    new_diff_optimizer = DiffOpt.diff_optimizer(builder)
+    new_diff_optimizer = DiffOpt.diff_optimizer(
+        builder;
+        with_parametric_opt_interface = true,
+    )
     JuMP.set_optimizer(
         model.plan,
-        () ->
-            POI.Optimizer(new_diff_optimizer; evaluate_duals = evaluate_duals),
+        () -> new_diff_optimizer,
     )
 
     # basic setting for assess model
@@ -131,10 +133,6 @@ end
 function JuMP.set_silent(model::Model)
     MOI.set(model.plan, MOI.Silent(), true)
     return MOI.set(model.assess, MOI.Silent(), true)
-end
-
-function JuMP.num_variables(model::Model)
-    return JuMP.num_variables(model.plan) + JuMP.num_variables(model.assess)
 end
 
 function JuMP.num_constraints(model::Model)
