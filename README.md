@@ -7,7 +7,7 @@ ApplicationDrivenLearning.jl is a Julia package for training time series models 
 ```julia
 import Pkg
 
-Pkg.add("ApplicationDrivenLearning")  # not working yet! clone the repo instead
+Pkg.add("https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl")
 
 using ApplicationDrivenLearning
 
