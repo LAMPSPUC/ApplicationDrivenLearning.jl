@@ -36,11 +36,12 @@ function compute_single_step_gradient(
     end
     DiffOpt.reverse_differentiate!(model.plan)
     for j = 1:size(model.forecast_vars, 1)
-        dCdy[j] = MOI.get(
-            model.plan,
-            DiffOpt.ReverseConstraintSet(),
-            ParameterRef(model.plan_forecast_params[j]),
-        ).value
+        dCdy[j] =
+            MOI.get(
+                model.plan,
+                DiffOpt.ReverseConstraintSet(),
+                ParameterRef(model.plan_forecast_params[j]),
+            ).value
     end
 
     return dCdy

@@ -117,14 +117,9 @@ JuMP.object_dictionary(model::Model) = model.obj_dict
 
 function JuMP.set_optimizer(model::Model, builder, evaluate_duals::Bool = true)
     # set diffopt optimizer for plan model
-    new_diff_optimizer = DiffOpt.diff_optimizer(
-        builder;
-        with_parametric_opt_interface = true,
-    )
-    JuMP.set_optimizer(
-        model.plan,
-        () -> new_diff_optimizer,
-    )
+    new_diff_optimizer =
+        DiffOpt.diff_optimizer(builder; with_parametric_opt_interface = true)
+    JuMP.set_optimizer(model.plan, () -> new_diff_optimizer)
 
     # basic setting for assess model
     return JuMP.set_optimizer(model.assess, builder)
