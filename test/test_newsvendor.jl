@@ -19,16 +19,27 @@ end)
     con1, y <= d.plan
     con2, y + w <= x.plan
 end)
-@objective(ApplicationDrivenLearning.Plan(model), Min, c * x.plan - q * y - r * w)
+@objective(
+    ApplicationDrivenLearning.Plan(model),
+    Min,
+    c * x.plan - q * y - r * w
+)
 @variables(ApplicationDrivenLearning.Assess(model), begin
     y >= 0
     w >= 0
 end)
-@constraints(ApplicationDrivenLearning.Assess(model), begin
-    con1, y <= d.assess
-    con2, y + w <= x.assess
-end)
-@objective(ApplicationDrivenLearning.Assess(model), Min, c * x.assess - q * y - r * w)
+@constraints(
+    ApplicationDrivenLearning.Assess(model),
+    begin
+        con1, y <= d.assess
+        con2, y + w <= x.assess
+    end
+)
+@objective(
+    ApplicationDrivenLearning.Assess(model),
+    Min,
+    c * x.assess - q * y - r * w
+)
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 nn = Chain(Dense(1 => 1; bias = false, init = (size...) -> rand(size...)))
@@ -41,7 +52,10 @@ nn = Chain(Dense(1 => 1; bias = false, init = (size...) -> rand(size...)))
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.BilevelMode,
         optimizer = HiGHS.Optimizer,
-        mode = BilevelJuMP.FortunyAmatMcCarlMode(primal_big_M = 100, dual_big_M = 100),
+        mode = BilevelJuMP.FortunyAmatMcCarlMode(
+            primal_big_M = 100,
+            dual_big_M = 100,
+        ),
         silent = true,
     )
     sol = ApplicationDrivenLearning.train!(model, X, Y, opt)

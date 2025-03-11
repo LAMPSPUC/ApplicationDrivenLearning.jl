@@ -25,6 +25,7 @@ function compute_single_step_gradient(
     dCdy::Vector{<:Real},
 )
     dCdz .= dual.(model.assess[:assess_policy_fix])
+    DiffOpt.empty_input_sensitivities!(model.plan)
     for i = 1:size(model.policy_vars, 1)
         MOI.set(
             model.plan,
@@ -35,11 +36,12 @@ function compute_single_step_gradient(
     end
     DiffOpt.reverse_differentiate!(model.plan)
     for j = 1:size(model.forecast_vars, 1)
-        dCdy[j] = MOI.get(
-            model.plan,
-            POI.ReverseParameter(),
-            model.plan_forecast_params[j],
-        )
+        dCdy[j] =
+            MOI.get(
+                model.plan,
+                DiffOpt.ReverseConstraintSet(),
+                ParameterRef(model.plan_forecast_params[j]),
+            ).value
     end
 
     return dCdy
