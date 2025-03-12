@@ -7,7 +7,7 @@ Extract the parameters of a Flux model (Flux.Chain or Flux.Dense) into a single
 vector.
 """
 function extract_flux_params(model::Union{Flux.Chain,Flux.Dense})
-    θ = Flux.params(model)
+    θ = Flux.trainables(model)
     return reduce(vcat, [vec(p) for p in θ])
 end
 
@@ -21,7 +21,7 @@ function fix_flux_params_single_model(
     θ::Vector{<:Real},
 )
     i = 1
-    for p in Flux.params(model)
+    for p in Flux.trainables(model)
         psize = prod(size(p))
         p .= reshape(θ[i:i+psize-1], size(p))
         i += psize
@@ -38,7 +38,7 @@ of parameters.
 function fix_flux_params_multi_model(models, θ::Vector{<:Real})
     i = 1
     for model in models
-        for p in Flux.params(model)
+        for p in Flux.trainables(model)
             psize = prod(size(p))
             p .= reshape(θ[i:i+psize-1], size(p))
             i += psize
@@ -54,8 +54,8 @@ Check if a Flux layer has parameters.
 """
 function has_params(layer)
     try
-        # Attempt to get parameters; if it works and isn't empty, return true
-        return !isempty(Flux.params(layer))
+        # Attempt to get trainable parameters; if it works and isn't empty, return true
+        return !isempty(Flux.trainable(layer))
     catch e
         # If there is an error (e.g. method not matching), assume no parameters
         return false

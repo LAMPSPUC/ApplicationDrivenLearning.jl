@@ -177,10 +177,10 @@ function solve_bilevel(
     ilayer = 1
     for layer in model.forecast.networks[1]
         if has_params(layer)
-            for p in Flux.params(layer.weight)
+            for p in Flux.trainables(layer.weight)
                 p .= value.(predictive_model_vars[ilayer][:W])
             end
-            for p in Flux.params(layer.bias)
+            for p in Flux.trainables(layer.bias)
                 p .= value.(predictive_model_vars[ilayer][:b])
             end
         end

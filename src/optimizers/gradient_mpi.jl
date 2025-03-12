@@ -32,6 +32,7 @@ function train_with_gradient_mpi!(
     T = size(X)[1]
     stochastic = batch_size > 0
     compute_full_cost = true
+    opt_state = Flux.setup(rule, model.forecast)
 
     # precompute batches
     batches = repeat(1:T, outer = (1, epochs))'
@@ -121,7 +122,7 @@ function train_with_gradient_mpi!(
             end
 
             # take gradient step (if not last epoch)
-            apply_gradient!(model.forecast, dCdy, epochx, rule)
+            apply_gradient!(model.forecast, dCdy, epochx, opt_state)
         end
 
         # release workers
