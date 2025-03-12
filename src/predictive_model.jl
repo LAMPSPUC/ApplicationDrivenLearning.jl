@@ -221,5 +221,5 @@ function apply_gradient!(
 )
     loss3(m, X) = mean(dCdy'm(X'))
     grad = Zygote.gradient(loss3, model, X)[1]
-    Optimisers.update!(opt_state, model, grad)
+    return Optimisers.update!(opt_state, model, grad)
 end
