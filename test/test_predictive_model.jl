@@ -26,8 +26,7 @@ out_size = 2
         ones((1, in_size)),
         Flux.setup(Flux.Descent(0.1), forecaster),
     )
-    @test Flux.trainables(forecaster)[1] ==
-          0.9 * ones((out_size, in_size))
+    @test Flux.trainables(forecaster)[1] == 0.9 * ones((out_size, in_size))
     @test Flux.trainables(forecaster)[2] == 0.9 * ones(out_size)
 end
 
@@ -55,8 +54,7 @@ end
         ones((1, in_size)),
         Flux.setup(Flux.Descent(0.1), forecaster),
     )
-    @test Flux.trainables(forecaster)[1] ==
-          0.9 * ones((out_size, in_size))
+    @test Flux.trainables(forecaster)[1] == 0.9 * ones((out_size, in_size))
     @test Flux.trainables(forecaster)[2] == 0.9 * ones(out_size)
 end
 
