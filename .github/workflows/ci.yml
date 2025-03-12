@@ -2,7 +2,7 @@ name: CI
 on:
   push:
     branches:
-      - master
+      - main
     tags: ['*']
   pull_request:
   workflow_dispatch:
@@ -24,7 +24,7 @@ jobs:
       matrix:
         version:
           - '1.11'
-          - '1.6'
+          - '1'
         os:
           - ubuntu-latest
         arch:
@@ -40,3 +40,6 @@ jobs:
       - uses: julia-actions/julia-runtest@v1
       - uses: julia-actions/julia-processcoverage@v1
       - uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: LAMPSPUC/ApplicationDrivenLearning.jl
