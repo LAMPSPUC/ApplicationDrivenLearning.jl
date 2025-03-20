@@ -22,7 +22,7 @@ function generate_inar_p_poisson(T::Int, p::Int, init_delta::Int=200)
     return demand[init_delta+1:end]
 end
 
-function generate_ar_p(T::Int, p::Int, μ::Float64=100.0, σ::Float64=30.0)
+function generate_ar_p(T::Int, p::Int, μ::Float64=100.0, σ::Float64=50.0)
     α = rand(Distributions.Uniform(0.1, 1.0), p)
     α = 1.0 * α ./ sum(α)  # Normalize to sum to 1
     demand = Vector{Float32}(undef, T)
@@ -43,7 +43,7 @@ end
 function generate_series_data(I::Int, T::Int, p::Int)
     Y = Matrix{Float32}(undef, T+p, I)
     for i=1:I
-        Y[:, i] = max.(generate_ar_p(T+p, p), 10.0)
+        Y[:, i] = generate_ar_p(T+p, p)
     end
     X = Matrix{Float32}(undef, T, I*p)
     for t=1:T
