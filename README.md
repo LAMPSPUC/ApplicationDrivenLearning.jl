@@ -1,82 +1,51 @@
-# ApplicationDrivenLearning.jl
+# Examples
 
-ApplicationDrivenLearning.jl is a Julia package for training time series models using the application driven learning framework, that connects the optimization problem final cost with predictive model parameters in order to achieve the best model for a given application.
+This repository contains examples for using ApplicationDrivenLearning.jl.
 
-[![Build Status](https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl/actions?query=workflow%3ACI)
+## Structure
 
-[![codecov](https://codecov.io/gh/LAMPSPUC/ApplicationDrivenLearning.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/LAMPSPUC/ApplicationDrivenLearning.jl)
- 
-[![dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://LAMPSPUC.github.io/ApplicationDrivenLearning.jl/dev/)
 
-## Usage
+```sh
+root/
+├─ examples/
+│   ├─ newsvendor_1/
+│   ├─ eda/ # análises exploratórias
+│   └─ models/ # experimentos de modelagem
+├─ src/ # código fonte da solução desenvolvida
+│   ├─ data_utils/
+│   │   ├─ data_read # funções de leitura de dados sanitizados a partir das fontes utilizadas
+│   │   ├─ data_transform # funções de tratamento de dados
+│   │   ├─ data_save # funções de salvamento de dados processados
+│   │   └─ validators
+│   │       ├─ input # estruturas de schema para validação dos dados de input
+│   │       └─ output # estruturas de schema para validação dos dados de output
+│   ├─ models/ # modelos preditivos modularizados
+│   ├─ config/ # arquivos YAML de configuração de variáveis gerais do projeto
+│   ├─ common/ # clients: código de conexão e interação com serviços externos (s3, blob, keyvault, gpt, etc...)
+│   └─ utils/ # funcionalidades úteis
+├─ orchestration/
+│   ├─ commands/ # arquivos de configuração ou descrição dos processos a serem executados (.yaml, .sh, etc)
+│   └─ scripts/ # código dos processos a serem executados
+├─ app/ # interface para uso da aplicação (FastAPI, Flask, Streamlit)
+├─ tests/ # testes unitários
+├─ cicd/ # pipelines de ci/cd
+├─ requirements.txt # arquivo de declaração das dependências e versões utilizadas
+├─ docs/ # documentação adicional: dicionários de dados, pequenas amostras de dados, instruções de uso, etc
+└─ .gitignore
+``` 
 
-```julia
-import Pkg
+## Examples Description
 
-Pkg.add("https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl")
+### Newvendor 1
 
-using ApplicationDrivenLearning
+Simple multistep newsvendor problem with AR-1 process timeseries. Applies least-squares methodology and BilevelMode and shows difference between ls and opt in in-sample prediction, prediction error and assessed cost. 
 
-## Single power plan problem
+### Nesvendor 2
 
-# data
-X = reshape([1 1], (2, 1))
-Y = reshape([0 2], (2, 1))
+Uses same basic nesvendor problem, but with 2 timeseries representing 2 different newsvendor instances, with different cost parameters and AR-7 processes for timeseries generation. This shows how to use `input_output_map` to apply the same predictive model for multiple prediction decision variables. 
 
-# main model and policy / forecast variables
-model = ApplicationDrivenLearning.Model()
-@variables(model, begin
-    z, ApplicationDrivenLearning.Policy
-    θ, ApplicationDrivenLearning.Forecast
-end)
+We also analyze the relationship between size of the bias introduced by the application driven learning model, measured by the absolute difference between predictions, and uncertainty from the least-squares model, measured using 95% confidence intervals.
 
-# plan model
-@variables(ApplicationDrivenLearning.Plan(model), begin
-    c1 ≥ 0
-    c2 ≥ 0
-end)
-@constraints(ApplicationDrivenLearning.Plan(model), begin
-    c1 ≥ 100 * (θ.plan-z.plan)
-    c2 ≥ 20 * (z.plan-θ.plan)
-end)
-@objective(ApplicationDrivenLearning.Plan(model), Min, 10*z.plan + c1 + c2)
+### Nesvendor 3
 
-# assess model
-@variables(ApplicationDrivenLearning.Assess(model), begin
-    c1 ≥ 0
-    c2 ≥ 0
-end)
-@constraints(ApplicationDrivenLearning.Assess(model), begin
-    c1 ≥ 100 * (θ.assess-z.assess)
-    c2 ≥ 20 * (z.assess-θ.assess)
-end)
-@objective(ApplicationDrivenLearning.Assess(model), Min, 10*z.assess + c1 + c2)
-
-# basic setting
-set_optimizer(model, HiGHS.Optimizer)
-set_silent(model)
-
-# forecast model
-nn = Chain(Dense(1 => 1; bias=false))
-ApplicationDrivenLearning.set_forecast_model(model, nn)
-
-# training and getting solution
-solution = ApplicationDrivenLearning.train!(
-    model,
-    X,
-    Y,
-    ApplicationDrivenLearning.Options(
-        ApplicationDrivenLearning.NelderMeadMode
-    )
-)
-print(solution.params)
-```
-
-## Installation
-
-This package is **not yet** registered so if you want to use or test the code clone this repo and include source code from `src` directory.
-
-## Contributing
-
-* PRs such as adding new models and fixing bugs are very welcome!
-* For nontrivial changes, you'll probably want to first discuss the changes via issue.
+Uses same problem from `Newsvendor 2`. In this setting, we compare performance for increasing predictive model parameter sizes, showing that GradientMode eventually becomes a better alternative than NelderMeadMode and BilevelMode for big models. 
