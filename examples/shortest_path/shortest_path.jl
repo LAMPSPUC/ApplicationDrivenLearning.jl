@@ -1,7 +1,7 @@
 import CSV
 import Flux
+import HiGHS
 import Random
-using Ipopt
 using JuMP
 using DataFrames
 
@@ -97,7 +97,7 @@ for i=1:grid[1]
 end
 @objective(Plan(optmodel), Min, c_plan_set'x_plan_set)
 @objective(Assess(optmodel), Min, c_assess_set'x_assess_set)
-set_optimizer(optmodel, Ipopt.Optimizer)
+set_optimizer(optmodel, HiGHS.Optimizer)
 set_silent(optmodel)
 
 # linear model
@@ -116,15 +116,14 @@ ApplicationDrivenLearning.set_forecast_model(optmodel, reg)
 println("LS model train cost: $(compute_cost(optmodel, x_train, c_train, false))")
 
 t0 = time()
-ind = 1:100
 nm_sol = ApplicationDrivenLearning.train!(
     optmodel, x_train[ind, :], c_train[ind, :],
     ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode,
-        iterations=300, 
+        iterations=30, 
         show_trace=true, 
         show_every=1,
-        time_limit=300,
+        time_limit=60,
     )
 )
 println("Elapsed time: $(round(time() - t0, digits=2)) seconds")
@@ -139,7 +138,7 @@ solutions_to_compare = Matrix(
 test_costs = zeros(size(c_test, 1))
 test_solutions = zeros(size(c_test))
 for i=1:size(x_test, 1)
-    c = -compute_cost(optmodel, x_test[[i], :], c_test[[i], :])
+    c = compute_cost(optmodel, x_test[[i], :], c_test[[i], :])
     sol = value.(ApplicationDrivenLearning.assess_policy_vars(optmodel))
     test_costs[i] = c
     test_solutions[i, :] .= sol
