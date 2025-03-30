@@ -4,9 +4,7 @@ import HiGHS
 import Random
 using JuMP
 using DataFrames
-
-include("..//..//..//ApplicationDrivenLearning.jl_DEV//src//ApplicationDrivenLearning.jl")
-using .ApplicationDrivenLearning
+using ApplicationDrivenLearning
 
 
 Random.seed!(0)
