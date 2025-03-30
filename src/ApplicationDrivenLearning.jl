@@ -135,15 +135,10 @@ and new constraint fixing to original forecast variables.
 function build_plan_model_forecast_params(model::Model)
     # adds parametrized forecast variables using MOI.Parameter
     forecast_size = size(model.forecast_vars)[1]
-    model.plan_forecast_params = @variable(
-        model.plan,
-        _forecast[1:forecast_size] in MOI.Parameter.(zeros(forecast_size))
-    )
-    # fixes old and new prediction variables together
+    model.plan_forecast_params = plan_forecast_vars(model)
     @constraint(
         model.plan,
-        plan_forecast_fix,
-        model.plan_forecast_params .== plan_forecast_vars(model)
+        model.plan_forecast_params .∈ MOI.Parameter.(zeros(forecast_size))
     )
 end
 
