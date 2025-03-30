@@ -3,17 +3,33 @@ function compute_single_step_cost(
     y::Vector{<:Real},
     yhat::Vector{<:Real},
 )
+    # set forecast params as prediction output
     MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat)
+    # optimize plan model
     optimize!(model.plan)
-    @assert termination_status(model.plan) == MOI.OPTIMAL "Optimization failed for PLAN model"
+    # check for solution and fix assess policy vars
+    try
+        set_normalized_rhs.(
+            model.assess[:assess_policy_fix],
+            value.(plan_policy_vars(model)),
+        )
+    catch e
+        println("Optimization failed for PLAN model.")
+        throw(e)
+    end
+    # fix assess forecast vars on observer values
     fix.(assess_forecast_vars(model), y; force = true)
-    set_normalized_rhs.(
-        model.assess[:assess_policy_fix],
-        value.(plan_policy_vars(model)),
-    )
+    # optimize assess model
     optimize!(model.assess)
-    @assert termination_status(model.assess) == MOI.OPTIMAL "Optimization failed for ASSESS model"
-    return objective_value(model.assess)
+    # check for optimization
+    try
+        return objective_value(model.assess)
+    catch e
+        println("Optimization failed for ASSESS model")
+        throw(e)
+    end
+    # should never get here
+    return 0
 end
 
 """
