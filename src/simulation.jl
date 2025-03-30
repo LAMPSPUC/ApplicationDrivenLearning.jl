@@ -19,11 +19,6 @@ function compute_single_step_cost(
     end
     # fix assess forecast vars on observer values
     fix.(assess_forecast_vars(model), y; force = true)
-    # fix assess policy vars on plan solution
-    set_normalized_rhs.(
-        model.assess[:assess_policy_fix],
-        value.(plan_policy_vars(model)),
-    )
     # optimize assess model
     optimize!(model.assess)
     # check for optimization
