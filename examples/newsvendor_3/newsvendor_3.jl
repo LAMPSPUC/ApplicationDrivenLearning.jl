@@ -1,5 +1,5 @@
 import Flux
-import HiGHS
+import Gurobi
 import Random
 import Statistics
 import BilevelJuMP
@@ -30,7 +30,7 @@ p2 = 12
 X, Y = generate_series_data(I, T, p2)
 X = hcat(X[:, 1:p], X[:, p2+1:p2+p])
 # init model
-model = init_newsvendor_model(I, HiGHS.Optimizer);
+model = init_newsvendor_model(I, Gurobi.Optimizer);
 
 function get_nn(p::Int, hidden_layers::Int, hidden_layers_size::Int=64)
     Random.seed!(0)
@@ -88,7 +88,7 @@ for n_hidden_layers in n_hidden_layers_space
             model, X, Y,
             ApplicationDrivenLearning.Options(
                 ApplicationDrivenLearning.BilevelMode,
-                optimizer=HiGHS.Optimizer,
+                optimizer=Gurobi.Optimizer,
                 mode=BilevelJuMP.FortunyAmatMcCarlMode(primal_big_M=5000, dual_big_M=5000)
             )
         )
@@ -103,7 +103,7 @@ for n_hidden_layers in n_hidden_layers_space
     end
 
     # train with nelder mead
-    if n_hidden_layers <= 2
+    if n_hidden_layers <= 1
         ls_nn = Flux.Chain(ls_nn..., Flux.relu)
         ApplicationDrivenLearning.set_forecast_model(
             model,

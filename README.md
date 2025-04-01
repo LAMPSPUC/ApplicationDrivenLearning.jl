@@ -20,6 +20,16 @@ root/
 │   │   ├─ lp.jl # optimization model mount
 │   │   ├─ ls.jl # least-squares model functions
 │   │   └─ newsvendor_3.jl # main script
+│   ├─ shortest_path/
+│   │   ├─ data/ # data folder
+│   │   │   ├─ input/ # (x,y) input data
+│   │   │   └─ costs_to_compare.csv # pyepo test costs
+│   │   └─ shortest_path.jl # main script
+│   ├─ knapsack/
+│   │   ├─ data/ # data folder
+│   │   │   ├─ input/ # (x,y) input data
+│   │   │   └─ costs_to_compare.csv # pyepo test costs
+│   │   └─ knapsack.jl # main script
 ``` 
 
 ## Examples Description
@@ -37,3 +47,11 @@ We also analyze the relationship between size of the bias introduced by the appl
 ### Nesvendor 3
 
 Uses same problem from `Newsvendor 2` with longer timeseries. In this setting, we compare performance for increasing number of predictive model parameters, showing that GradientMode eventually becomes a better alternative than NelderMeadMode and BilevelMode for big models.
+
+### Shortest path
+
+Shortest path problem from PyEPO (https://arxiv.org/abs/2206.14234). This takes data constructed from PyEPO code, mounts the same problem, solves it and compare out-of-sample costs.
+
+### Knapsack
+
+Knapsack problem from PyEPO (https://arxiv.org/abs/2206.14234). This takes data constructed from PyEPO code, mounts the same problem, solves it and compare out-of-sample costs. 

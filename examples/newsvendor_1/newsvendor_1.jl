@@ -1,7 +1,7 @@
 import GLM
 import Flux
 import Random
-import HiGHS
+import Gurobi
 import BilevelJuMP
 import Distributions
 using Plots
@@ -60,7 +60,7 @@ function build_nesvendor_jump_model(jump_model, x, d)
 end
 build_nesvendor_jump_model(ApplicationDrivenLearning.Plan(model), [i.plan for i in x], [i.plan for i in d])
 build_nesvendor_jump_model(ApplicationDrivenLearning.Assess(model), [i.assess for i in x], [i.assess for i in d])
-set_optimizer(model, HiGHS.Optimizer)
+set_optimizer(model, Gurobi.Optimizer)
 set_silent(model)
 
 # declare predictive model
@@ -80,7 +80,7 @@ bl_sol = ApplicationDrivenLearning.train!(
     model, X, Y,
     ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.BilevelMode,
-        optimizer=HiGHS.Optimizer,
+        optimizer=Gurobi.Optimizer,
         mode=BilevelJuMP.FortunyAmatMcCarlMode(primal_big_M=5000, dual_big_M=5000)
     )
 )

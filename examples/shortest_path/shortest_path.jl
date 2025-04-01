@@ -1,6 +1,6 @@
 import CSV
 import Flux
-import HiGHS
+import Gurobi
 import Random
 using JuMP
 using DataFrames
@@ -56,10 +56,10 @@ x_plan_set = [ix.plan for ix in x]
 c_plan_set = [ic.plan for ic in c]
 x_assess_set = [ix.assess for ix in x]
 c_assess_set = [ic.assess for ic in c]
-@constraint(Plan(optmodel), x_plan_set .>= 0)
-@constraint(Assess(optmodel), x_assess_set .>= 0)
-@constraint(Plan(optmodel), x_plan_set .<= 1)
-@constraint(Assess(optmodel), x_assess_set .<= 1)
+@constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set .>= 0)
+@constraint(ApplicationDrivenLearning.Assess(optmodel), x_assess_set .>= 0)
+@constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set .<= 1)
+@constraint(ApplicationDrivenLearning.Assess(optmodel), x_assess_set .<= 1)
 for i=1:grid[1]
     for j=1:grid[2]
         v = (i-1)*grid[2] + j
@@ -80,22 +80,22 @@ for i=1:grid[1]
         end
         # source
         if (i == 1) && (j == 1)
-            @constraint(Plan(optmodel), expr_plan == -1)
-            @constraint(Assess(optmodel), expr_assess == -1)
+            @constraint(ApplicationDrivenLearning.Plan(optmodel), expr_plan == -1)
+            @constraint(ApplicationDrivenLearning.Assess(optmodel), expr_assess == -1)
         # sink
         elseif (i == grid[1]) && (j == grid[2])
-            @constraint(Plan(optmodel), expr_plan == 1)
-            @constraint(Assess(optmodel), expr_assess == 1)
+            @constraint(ApplicationDrivenLearning.Plan(optmodel), expr_plan == 1)
+            @constraint(ApplicationDrivenLearning.Assess(optmodel), expr_assess == 1)
         # transition
         else
-            @constraint(Plan(optmodel), expr_plan == 0)
-            @constraint(Assess(optmodel), expr_assess == 0)
+            @constraint(ApplicationDrivenLearning.Plan(optmodel), expr_plan == 0)
+            @constraint(ApplicationDrivenLearning.Assess(optmodel), expr_assess == 0)
         end
     end
 end
-@objective(Plan(optmodel), Min, c_plan_set'x_plan_set)
-@objective(Assess(optmodel), Min, c_assess_set'x_assess_set)
-set_optimizer(optmodel, HiGHS.Optimizer)
+@objective(ApplicationDrivenLearning.Plan(optmodel), Min, c_plan_set'x_plan_set)
+@objective(ApplicationDrivenLearning.ApplicationDrivenLearning.Assess(optmodel), Min, c_assess_set'x_assess_set)
+set_optimizer(optmodel, Gurobi.Optimizer)
 set_silent(optmodel)
 
 # linear model
@@ -111,11 +111,11 @@ for epoch=1:100
     end
 end
 ApplicationDrivenLearning.set_forecast_model(optmodel, reg)
-println("LS model train cost: $(compute_cost(optmodel, x_train, c_train, false))")
+println("LS model train cost: $(ApplicationDrivenLearning.compute_cost(optmodel, x_train, c_train, false))")
 
 t0 = time()
 nm_sol = ApplicationDrivenLearning.train!(
-    optmodel, x_train[ind, :], c_train[ind, :],
+    optmodel, x_train, c_train,
     ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode,
         iterations=30, 
@@ -136,11 +136,11 @@ solutions_to_compare = Matrix(
 test_costs = zeros(size(c_test, 1))
 test_solutions = zeros(size(c_test))
 for i=1:size(x_test, 1)
-    c = compute_cost(optmodel, x_test[[i], :], c_test[[i], :])
+    c = ApplicationDrivenLearning.compute_cost(optmodel, x_test[[i], :], c_test[[i], :])
     sol = value.(ApplicationDrivenLearning.assess_policy_vars(optmodel))
     test_costs[i] = c
     test_solutions[i, :] .= sol
 end
 
-println("Avg test cost (base) = $(sum(costs_to_compare) / size(c_test, 1))")
-println("Avg test cost (model) = $(sum(test_costs) / size(c_test, 1))")
+println("Avg test cost (base) = $(sum(costs_to_compare) / size(c_test, 1))")  # 3.94915
+println("Avg test cost (model) = $(sum(test_costs) / size(c_test, 1))")  # 3.51892

@@ -1,7 +1,7 @@
 import CSV
 import Flux
 import Random
-using SCIP
+using Gurobi
 using JuMP
 using DataFrames
 using ApplicationDrivenLearning
@@ -38,13 +38,13 @@ optmodel = ApplicationDrivenLearning.Model()
 end)
 x_plan_set = [ix.plan for ix in x]
 c_plan_set = [ic.plan for ic in c]
-@constraint(Plan(optmodel), x_plan_set'W .<= caps')
-@objective(Plan(optmodel), Min, -c_plan_set'x_plan_set)
+@constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set'W .<= caps')
+@objective(ApplicationDrivenLearning.Plan(optmodel), Min, -c_plan_set'x_plan_set)
 x_assess_set = [ix.assess for ix in x]
 c_assess_set = [ic.assess for ic in c]
-@constraint(Assess(optmodel), x_assess_set'W .<= caps')
-@objective(Assess(optmodel), Min, -c_assess_set'x_assess_set)
-set_optimizer(optmodel, SCIP.Optimizer)
+@constraint(ApplicationDrivenLearning.Assess(optmodel), x_assess_set'W .<= caps')
+@objective(ApplicationDrivenLearning.Assess(optmodel), Min, -c_assess_set'x_assess_set)
+set_optimizer(optmodel, Gurobi.Optimizer)
 set_silent(optmodel)
 
 # linear model
@@ -60,7 +60,7 @@ for epoch=1:30
     end
 end
 ApplicationDrivenLearning.set_forecast_model(optmodel, reg)
-println("LS model train cost: $(compute_cost(optmodel, x_train, c_train, false))")
+println("LS model train cost: $(ApplicationDrivenLearning.compute_cost(optmodel, x_train, c_train, false))")
 
 # train with nelder mead
 nm_sol = ApplicationDrivenLearning.train!(
@@ -85,11 +85,11 @@ solutions_to_compare = Matrix(
 test_costs = zeros(size(c_test, 1))
 test_solutions = zeros(size(c_test))
 for i=1:size(x_test, 1)
-    c = -compute_cost(optmodel, x_test[[i], :], c_test[[i], :])
+    c = -ApplicationDrivenLearning.compute_cost(optmodel, x_test[[i], :], c_test[[i], :])
     sol = value.(ApplicationDrivenLearning.assess_policy_vars(optmodel))
     test_costs[i] = c
     test_solutions[i, :] .= sol
 end
 
-println("Avg test cost (base) = $(sum(costs_to_compare) / size(c_test, 1))")
-println("Avg test cost (model) = $(sum(test_costs) / size(c_test, 1))")
+println("Avg test cost (base) = $(sum(costs_to_compare) / size(c_test, 1))")  # -36.3
+println("Avg test cost (model) = $(sum(test_costs) / size(c_test, 1))")  # -36.745

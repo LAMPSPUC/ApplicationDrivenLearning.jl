@@ -1,7 +1,7 @@
 function get_ls_solution(X, Y)
     T, I = size(Y)
     p = Int(size(X, 2) / I)
-    ls_opt_model = JuMP.Model(HiGHS.Optimizer)
+    ls_opt_model = JuMP.Model(Gurobi.Optimizer)
     @variable(ls_opt_model, θ[1:p+1])
     yhat = Matrix{AffExpr}(undef, T, I)
     for i=1:I
