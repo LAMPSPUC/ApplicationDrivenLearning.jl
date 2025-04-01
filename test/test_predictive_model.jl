@@ -24,11 +24,10 @@ out_size = 2
         forecaster,
         ones(out_size),
         ones((1, in_size)),
-        Flux.Descent(0.1),
+        Flux.setup(Flux.Descent(0.1), forecaster),
     )
-    @test Flux.params(forecaster.networks[1])[1] ==
-          0.9 * ones((out_size, in_size))
-    @test Flux.params(forecaster.networks[1])[2] == 0.9 * ones(out_size)
+    @test Flux.trainables(forecaster)[1] == 0.9 * ones((out_size, in_size))
+    @test Flux.trainables(forecaster)[2] == 0.9 * ones(out_size)
 end
 
 @testset "Single-Chain" begin
@@ -53,11 +52,10 @@ end
         forecaster,
         ones(out_size),
         ones((1, in_size)),
-        Flux.Descent(0.1),
+        Flux.setup(Flux.Descent(0.1), forecaster),
     )
-    @test Flux.params(forecaster.networks[1])[1] ==
-          0.9 * ones((out_size, in_size))
-    @test Flux.params(forecaster.networks[1])[2] == 0.9 * ones(out_size)
+    @test Flux.trainables(forecaster)[1] == 0.9 * ones((out_size, in_size))
+    @test Flux.trainables(forecaster)[2] == 0.9 * ones(out_size)
 end
 
 @testset "Multi-Variate-Dense" begin
@@ -84,11 +82,11 @@ end
         forecaster,
         ones(out_size),
         ones((1, in_size)),
-        Flux.Descent(0.1),
+        Flux.setup(Flux.Descent(0.1), forecaster),
     )
-    @test Flux.params(forecaster.networks[1])[1] ==
+    @test Flux.trainables(forecaster)[1] ==
           0.8 * ones((model_out_size, model_in_size))
-    @test Flux.params(forecaster.networks[1])[2] == 0.8 * ones(model_out_size)
+    @test Flux.trainables(forecaster)[2] == 0.8 * ones(model_out_size)
 end
 
 @testset "Multi-Model-Dense" begin
@@ -122,12 +120,12 @@ end
         forecaster,
         ones(out_size),
         ones((1, in_size)),
-        Flux.Descent(0.1),
+        Flux.setup(Flux.Descent(0.1), forecaster),
     )
-    @test Flux.params(forecaster.networks[1])[1] ==
+    @test Flux.trainables(forecaster)[1] ==
           0.9 * ones((model_out_size, model_in_size))
-    @test Flux.params(forecaster.networks[1])[2] == 0.9 * ones(model_out_size)
-    @test Flux.params(forecaster.networks[2])[1] ==
+    @test Flux.trainables(forecaster)[2] == 0.9 * ones(model_out_size)
+    @test Flux.trainables(forecaster)[3] ==
           0.9 * ones((model_out_size, model_in_size))
-    @test Flux.params(forecaster.networks[2])[2] == 0.9 * ones(model_out_size)
+    @test Flux.trainables(forecaster)[4] == 0.9 * ones(model_out_size)
 end

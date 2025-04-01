@@ -42,6 +42,7 @@ function train_with_gradient!(
     best_θ = extract_params(model.forecast)
     trace = Array{Float64}(undef, epochs)
     stochastic = batch_size > 0
+    opt_state = Flux.setup(rule, model.forecast)
 
     # precompute batches
     batches = repeat(1:T, outer = (1, epochs))'
@@ -87,7 +88,7 @@ function train_with_gradient!(
         end
 
         # take gradient step
-        apply_gradient!(model.forecast, dC, epochx, rule)
+        apply_gradient!(model.forecast, dC, epochx, opt_state)
     end
 
     # fix best model

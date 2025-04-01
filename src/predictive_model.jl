@@ -1,6 +1,7 @@
 using Flux
 using Statistics
 import Zygote
+import Optimisers
 
 """
     PredictiveModel(networks, input_output_map, input_size, output_size)
@@ -198,7 +199,7 @@ function apply_params(model::PredictiveModel, θ)
 end
 
 """
-    apply_gradient!(model, dCdy, X, optimizer)
+    apply_gradient!(model, dCdy, X, rule)
 
 Apply a gradient vector to the model parameters.
 
@@ -209,17 +210,16 @@ Apply a gradient vector to the model parameters.
   - `model::PredictiveModel`: model to be updated.
   - `dCdy::Vector{<:Real}`: gradient vector.
   - `X::Matrix{<:Real}`: input data.
-  - `optimizer`: Optimiser to be used.
+  - `rule`: Optimisation rule.
     ...
 """
 function apply_gradient!(
     model::PredictiveModel,
     dCdy::Vector{<:Real},
     X::Matrix{<:Real},
-    optimizer,
+    opt_state,
 )
-    ps = Flux.params(model.networks)
-    loss(x, y) = mean(dCdy'model(x))
-    train_data = [(X', 0.0)]
-    return Flux.train!(loss, ps, train_data, optimizer)
+    loss3(m, X) = mean(dCdy'm(X'))
+    grad = Zygote.gradient(loss3, model, X)[1]
+    return Optimisers.update!(opt_state, model, grad)
 end
