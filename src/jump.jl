@@ -64,14 +64,14 @@ function JuMP.add_variable(
             name * "_assess",
         ),
     )
-    
+
     # forecast variables can't have bounds
     if JuMP.has_lower_bound(forecast.plan)
         @warn "Forecast variable lower bound will be removed."
         JuMP.delete_lower_bound(forecast.plan)
         JuMP.delete_lower_bound(forecast.assess)
     end
-    
+
     if JuMP.has_upper_bound(forecast.plan)
         @warn "Forecast variable upper bound will be removed."
         JuMP.delete_upper_bound(forecast.plan)
