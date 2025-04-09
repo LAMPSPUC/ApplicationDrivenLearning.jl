@@ -94,6 +94,19 @@ plot!(yhat_opt, label="Opt")
 savefig(fig1, joinpath(IMGS_PATH, "demand.png"))
 
 # compare errors
-fig2 = plot((yhat_ls .- Y).^2, label="LS (Cost=$(round(cost_ls, digits=2)))", title="MSE", xlabel="Timesteps")
-plot!((yhat_opt .- Y).^2, label="Opt (Cost=$(round(cost_opt, digits=2)))")
+bins = -30:5:30
+fig2 = histogram(
+    (yhat_ls .- Y),
+    alpha=.7 ,
+    bins=bins,
+    label="LS (Cost=$(round(cost_ls, digits=2)))", 
+    title="Prediction Errors", 
+    xlabel="Timesteps"
+)
+histogram!(
+    (yhat_opt .- Y), 
+    alpha=.7,
+    bins=bins,
+    label="Opt (Cost=$(round(cost_opt, digits=2)))"
+)
 savefig(fig2, joinpath(IMGS_PATH, "errors.png"))

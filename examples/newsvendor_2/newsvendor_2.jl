@@ -127,12 +127,37 @@ savefig(fig2, joinpath(IMGS_PATH, "newsvendor_2_demand.png"))
 # compare errors
 err_ls = (yhat_ls .- Y)
 err_opt = (yhat_opt .- Y)
-fig3 = plot(err_ls[:, 1], label="LS", title="Newsvendor 1 Error", xlabel="Timesteps")
-plot!(err_opt[:, 1], label="Opt")
+bins = -30:3:30
+fig3 = histogram(
+    err_ls[:, 1], 
+    alpha=.7,
+    bins=bins,
+    label="LS", 
+    title="Newsvendor 1 Error", 
+    xlabel="Timesteps"
+)
+histogram!(
+    err_opt[:, 1], 
+    alpha=.7,
+    bins=bins,
+    label="Opt"
+)
 savefig(fig3, joinpath(IMGS_PATH, "newsvendor_1_errors.png"))
 
-fig4 = plot(err_ls[:, 2], label="LS", title="Newsvendor 2 Error", xlabel="Timesteps")
-plot!(err_opt[:, 2], label="Opt")
+fig4 = histogram(
+    err_ls[:, 2], 
+    alpha=.7,
+    bins=bins,
+    label="LS", 
+    title="Newsvendor 2 Error", 
+    xlabel="Timesteps"
+)
+histogram!(
+    err_opt[:, 2], 
+    alpha=.7,
+    bins=bins,
+    label="Opt"
+)
 savefig(fig4, joinpath(IMGS_PATH, "newsvendor_2_errors.png"))
 
 # scatter plot
