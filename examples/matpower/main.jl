@@ -1,4 +1,4 @@
-# JQM.mpiexec(exe -> run(`$exe -n 7 $(Base.julia_cmd()) --project main.jl`))
+# JQM.mpiexec(exe -> run(`$exe -n 12 $(Base.julia_cmd()) --project main.jl`))
 
 import Parameters
 using JuMP
@@ -23,7 +23,7 @@ JQM = JobQueueMPI
 pretrain = false
 gradient_mode = true
 neldermead_mode = false
-CASE_NAME = "pglib_opf_case24_ieee_rts"
+CASE_NAME = "pglib_opf_case300_ieee"
 N_LAGS = 24
 N_DEMANDS = 20
 N_ZONES = 10
@@ -33,6 +33,19 @@ SPILL_COEF = 3.0
 TEST_SIZE = 7 * 24
 SIM_SLICES = 3 * 64
 SOLVE_TIME_LIMIT = 30
+
+# pretrain parameters
+PRETRAIN_EPOCHS = 30_000
+PRETRAIN_MAX_TIME = 60
+PRETRAIN_LEARNING_RATE = 1e-1
+PRETRAIN_BATCH_SIZE = -1
+
+# opt train parameters
+N_EPOCHS = 300
+BATCH_SIZE = -1
+LEARNING_RATE = 1e-3
+COMPUTE_EVERY = 1
+TIME_LIMIT = 600
 
 # .m file path
 case_path = joinpath(@__DIR__, "data", CASE_NAME * ".m")
@@ -90,10 +103,11 @@ if gradient_mode
         Y,
         ApplicationDrivenLearning.Options(
             ApplicationDrivenLearning.GradientMPIMode;
-            rule=Flux.Adam(1e-4), 
-            epochs=100,
-            compute_cost_every=10,
-            batch_size=10,
+            rule=Flux.Adam(LEARNING_RATE), 
+            epochs=N_EPOCHS,
+            compute_cost_every=COMPUTE_EVERY,
+            batch_size=BATCH_SIZE,
+            time_limit=TIME_LIMIT,
             mpi_finalize=false
         )
     )
@@ -117,10 +131,10 @@ elseif neldermead_mode
         Y,
         ApplicationDrivenLearning.Options(
             ApplicationDrivenLearning.NelderMeadMPIMode;
-            iterations=300, 
+            iterations=N_EPOCHS, 
             show_trace=true, 
-            show_every=30,
-            time_limit=60,
+            show_every=COMPUTE_EVERY,
+            time_limit=TIME_LIMIT,
             mpi_finalize=false
         )
     )
@@ -136,7 +150,7 @@ elseif neldermead_mode
         println("OPT-NM: $nm_cost")
     end
 else
-    println("Not")
+    println("Optimization mode not defined. Skipping optimization.")
 end
 
 if (gradient_mode | neldermead_mode) 

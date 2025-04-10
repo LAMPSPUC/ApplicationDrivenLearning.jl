@@ -33,7 +33,7 @@ opt_pred = model.forecast(X')'
 opt_cost = ADL.compute_cost(model, X, Y)
 
 diff_pred = opt_pred - ls_pred
-pdiff_pred = diff_pred ./ ls_pred
+pdiff_pred = diff_pred ./ abs.(ls_pred)
 fig1 = histogram(
     100 .* vec(pdiff_pred[:, 1:pd.n_demand]),
     alpha=.7,
@@ -67,3 +67,8 @@ fig3 = histogram(
     label=""
 )
 savefig(fig3, joinpath(imgs_path, "pred_diff_resdn.png"))
+
+N = pd.n_demand
+fig4 = plot(ls_pred[:, 1:N], layout=N, label="", alpha=.7, xticks=false)
+plot!(opt_pred[:, 1:N], layout=N, label="", alpha=.7, xticks=false)
+savefig(fig4, joinpath(imgs_path, "predictions.png"))
