@@ -1,26 +1,36 @@
 # predictive model
-weights_dist = Distributions.Exponential(1.0)
-weights_init(size...) = rand(weights_dist, size)
-nns = [
-    Flux.Chain(Flux.Dense(lags => 1; init=weights_init), NNlib.leakyrelu),
-    Flux.Chain(Flux.Dense(1 => 20; bias=false, init=weights_init), NNlib.leakyrelu),
-]
+
+if N_HIDDEN_LAYERS == 0
+    nns = [
+        Flux.Chain(Flux.Dense(lags => 1), NNlib.leakyrelu),
+        Flux.Chain(Flux.Dense(1 => 20; bias=false), NNlib.leakyrelu),
+    ]
+else
+    nns = [
+        Flux.Chain(
+            Flux.Dense(lags => HIDDEN_SIZE), NNlib.leakyrelu,
+            [Flux.Dense(HIDDEN_SIZE => HIDDEN_SIZE, NNlib.leakyrelu) for _=1:N_HIDDEN_LAYERS-1]...,
+            Flux.Dense(HIDDEN_SIZE => 1),
+        ),
+        Flux.Chain(Flux.Dense(1 => 20; bias=false, ), NNlib.leakyrelu),
+    ]
+end
 input_output_map = [
     Dict(collect(lags*(d-1)+1:lags*(d-1)+lags) => [d] for d=1:pd.n_demand),
     Dict([lags*pd.n_demand+1] => collect(pd.n_demand+1:pd.n_demand+2*pd.n_zones))
 ]
 
 # fix nns[2] params
-Flux.params(nns[2][1])[1] .= Y[1,pd.n_demand+1:end]
+Flux.params(nns[2][1])[1] .= Y_train[1,pd.n_demand+1:end]
 
 # pre-train
 if PRETRAIN_BATCH_SIZE == -1
-    pbs = size(X, 1)
+    pbs = size(X_train, 1)
 else
     pbs = PRETRAIN_BATCH_SIZE
 end
 if pretrain
-    train_data = Flux.DataLoader((X', Y'), batchsize=pbs, shuffle=true)
+    train_data = Flux.DataLoader((X_train', Y_train'), batchsize=pbs, shuffle=true)
     opt_state = Flux.setup(Flux.Adam(PRETRAIN_LEARNING_RATE), nns)
     local epoch = 1
     local init_time = time()
@@ -34,7 +44,7 @@ if pretrain
             )
         end
         
-        err2 = mean(sum((nns[1](X[:, lags*(d-1)+1:lags*(d-1)+lags]') - Y[:, d]').^2 for d=1:pd.n_demand))
+        err2 = mean(sum((nns[1](X_train[:, lags*(d-1)+1:lags*(d-1)+lags]') - Y_train[:, d]').^2 for d=1:pd.n_demand))
         err_var = abs(err - err2)
         err = err2
 
