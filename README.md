@@ -55,3 +55,7 @@ Shortest path problem from PyEPO (https://arxiv.org/abs/2206.14234). This takes 
 ### Knapsack
 
 Knapsack problem from PyEPO (https://arxiv.org/abs/2206.14234). This takes data constructed from PyEPO code, mounts the same problem, solves it and compare out-of-sample costs. 
+
+### Minimal Scheduling
+
+Minimal energy system scheduling problem. Applies a setting with just one plant and demand point to demonstrate the impact of the application driven learning framework regarding cost assimetry.
