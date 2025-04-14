@@ -72,7 +72,8 @@ function train_with_gradient!(
             # store and print cost
             trace[epoch] = C
             if verbose
-                println("Epoch $epoch | Cost = $(round(C, digits=2))")
+                dtime = time() - start_time
+                println("Epoch $epoch | Time = $(round(dtime, digits=1))s | Cost = $(round(C, digits=2))")
             end
 
             # evaluate if best model
