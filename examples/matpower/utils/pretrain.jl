@@ -36,7 +36,7 @@ if pretrain
     local init_time = time()
     local err = 1e8
     local err_var = 1e8
-    while (epoch <= PRETRAIN_EPOCHS) & (err_var >= 1e-2)
+    while (epoch <= PRETRAIN_EPOCHS)
         Flux.train!(nns, train_data, opt_state) do m, x, y
             sum(
                 sum((m[1](x[lags*(d-1)+1:lags*(d-1)+lags,:]) - y[d, :]').^2)

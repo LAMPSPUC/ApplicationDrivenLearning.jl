@@ -16,38 +16,19 @@ using DataFrames
 import CSV
 using ApplicationDrivenLearning
 
-CASE_NAME = "pglib_opf_case24_ieee_rts"
-N_LAGS = 24
-N_DEMANDS = 20
-N_ZONES = 10
-COEF_VARIATION = 0.4
-DEFF_COEF = 8.0
-SPILL_COEF = 3.0
-TEST_SIZE = 7 * 24
-SIM_SLICES = 3 * 64
 
-N_HIDDEN_LAYERS = 0
+include("config.jl")
 pretrain = false
-
-# .m file path
-case_path = joinpath(@__DIR__, "data", CASE_NAME * ".m")
-
-# demand file path
-demand_path = joinpath(@__DIR__, "data", "demand.csv")
-
-# results path
-result_path = joinpath(@__DIR__, "data", "results", CASE_NAME, "size_$N_HIDDEN_LAYERS")
-imgs_path = joinpath(result_path, "imgs")
-pretrained_model_state = joinpath(result_path, "pretrain_state.jld2")
-gradient_model_state = joinpath(result_path, "model_state_gd.jld2")
-neldermead_model_state = joinpath(result_path, "model_state_nm.jld2")
-
-###########################################################################
+gradient_mode = false
+neldermead_mode = false
 
 include("utils/struct.jl")
 include("utils/model.jl")
 include("utils/data.jl")
 include("utils/pretrain.jl")
+
+gradient_model_state = joinpath(result_path, "model_state_gd.jld2")
+neldermead_model_state = joinpath(result_path, "model_state_nm.jld2")
 
 ###########################################################################
 
@@ -65,9 +46,9 @@ ADL.set_forecast_model(
     deepcopy(pred_model)
 )
 ls_pred_train = model.forecast(X_train')'
-ls_cost_train = ADL.compute_cost(model, X_train, Y_train)
+ls_cost_train = ADL.compute_cost(model, X_train, Y_train, false, false)
 ls_pred_test = model.forecast(X_test')'
-ls_cost_test = ADL.compute_cost(model, X_test, Y_test)
+ls_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
 
 # get GD model
 models_state = JLD2.load(gradient_model_state, "state")
@@ -83,9 +64,9 @@ ADL.set_forecast_model(
     deepcopy(pred_model)
 )
 gd_pred_train = model.forecast(X_train')'
-gd_cost_train = ADL.compute_cost(model, X_train, Y_train)
+gd_cost_train = ADL.compute_cost(model, X_train, Y_train, false, false)
 gd_pred_test = model.forecast(X_test')'
-gd_cost_test = ADL.compute_cost(model, X_test, Y_test)
+gd_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
 
 # get NM model
 models_state = JLD2.load(neldermead_model_state, "state")
@@ -101,9 +82,9 @@ ADL.set_forecast_model(
     deepcopy(pred_model)
 )
 nm_pred_train = model.forecast(X_train')'
-nm_cost_train = ADL.compute_cost(model, X_train, Y_train)
+nm_cost_train = ADL.compute_cost(model, X_train, Y_train, false, false)
 nm_pred_test = model.forecast(X_test')'
-nm_cost_test = ADL.compute_cost(model, X_test, Y_test)
+nm_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
 
 dataframe = DataFrame(
     model=String[],
@@ -114,28 +95,29 @@ dataframe = DataFrame(
 )
 push!(dataframe, (
     "LS",
-    ls_cost_train,
-    ls_cost_test,
+    mean(ls_cost_train),
+    mean(ls_cost_test),
     mean(sum((ls_pred_train' .- Y_train') .^2, dims=1)),
     mean(sum((ls_pred_test' .- Y_test') .^2, dims=1)),
 ))
 push!(dataframe, (
     "GD",
-    gd_cost_train,
-    gd_cost_test,
+    mean(gd_cost_train),
+    mean(gd_cost_test),
     mean(sum((gd_pred_train' .- Y_train') .^2, dims=1)),
     mean(sum((gd_pred_test' .- Y_test') .^2, dims=1)),
 ))
 push!(dataframe, (
     "NM",
-    nm_cost_train,
-    nm_cost_test,
+    mean(nm_cost_train),
+    mean(nm_cost_test),
     mean(sum((nm_pred_train' .- Y_train') .^2, dims=1)),
     mean(sum((nm_pred_test' .- Y_test') .^2, dims=1)),
 ))
 println(dataframe)
 CSV.write(joinpath(result_path, "costs.csv"), dataframe)
 
+# plot series predictions
 N = pd.n_demand
 Y = vcat(Y_train, Y_test)
 ls_pred = vcat(ls_pred_train, ls_pred_test)
@@ -145,6 +127,69 @@ fig = plot(Y[:, 1:N], layout=N, alpha=.7, xticks=false, label="Demand")
 plot!(ls_pred[:, 1:N], layout=N, alpha=.7, xticks=false, label="LS")
 plot!(gd_pred[:, 1:N], layout=N, alpha=.7, xticks=false, label="GD")
 plot!(nm_pred[:, 1:N], layout=N, alpha=.7, xticks=false,  label="NM")
-plot!(legend=:topleft, size=(1200, 800))
+plot!(
+    ones((2, N)) .* TRAIN_SIZE, 
+    vcat(minimum(Y, dims=1), maximum(Y, dims=1)),
+    layout=N,
+    color=:red,
+    label=""
+)
+plot!(legend=:bottomleft, size=(1200, 800))
 plot!(titlefontsize=12, tickfontsize=10, guidefontsize=10, legendfontsize=10)
 savefig(fig, joinpath(imgs_path, "predictions.png"))
+
+# plot costs
+fig2 = plot(vcat(ls_cost_train, ls_cost_test), label="LS", alpha=.7)
+plot!(vcat(gd_cost_train, gd_cost_test), label="GD", alpha=.7)
+plot!(vcat(nm_cost_train, nm_cost_test), label="NM", alpha=.7)
+plot!([TRAIN_SIZE, TRAIN_SIZE], [0, maximum(ls_cost_test)], color=:red, label="")
+savefig(fig2, joinpath(imgs_path, "costs.png"))
+
+# detail ls costs
+models_state = JLD2.load(pretrained_model_state, "state")
+Flux.loadmodel!(nns, models_state);
+pred_model = ADL.PredictiveModel(
+    nns, 
+    input_output_map, 
+    lags*pd.n_demand+1, 
+    pd.n_demand+2*pd.n_zones
+)
+ADL.set_forecast_model(
+    model,
+    deepcopy(pred_model)
+)
+dataframe = DataFrame(
+    data=String[],
+    t=Int64[],
+    cost_gen=Float64[],
+    cost_def=Float64[],
+    cost_spl=Float64[],
+    cost_total=Float64[],
+)
+for t=1:size(X_train, 1)
+    cost_total = ADL.compute_cost(model, X_train[[t], :], Y_train[[t], :])
+    push!(dataframe, (
+        "train",
+        t,
+        value(cost_gen),
+        value(cost_def),
+        value(cost_spl),
+        cost_total
+    ))
+end
+for t=1:size(X_test, 1)
+    cost_total = ADL.compute_cost(model, X_test[[t], :], Y_test[[t], :])
+    push!(dataframe, (
+        "test",
+        t,
+        value(cost_gen),
+        value(cost_def),
+        value(cost_spl),
+        cost_total
+    ))
+end
+fig = plot(dataframe[:, :cost_gen], label="Gen", alpha=.7)
+plot!(dataframe[:, :cost_def], label="Def", alpha=.7)
+plot!(dataframe[:, :cost_spl], label="Spl", alpha=.7)
+plot!(dataframe[:, :cost_total], label="Total", alpha=.7)
+savefig(fig, joinpath(imgs_path, "costs_detail_ls.png"))

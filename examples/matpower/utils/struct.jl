@@ -25,7 +25,7 @@ pd, ts = convert_matpower(
     SPILL_COEF,
     COEF_VARIATION,
     demand_path,
-    168,  # train_dataset_size_current
+    TRAIN_SIZE,  # train_dataset_size_current
     1  # sample_current
 )
 
