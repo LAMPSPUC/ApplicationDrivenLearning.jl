@@ -107,7 +107,9 @@ function train_with_gradient_mpi!(
                 trace[epoch] = curr_C
                 if verbose
                     dtime = time() - start_time
-                    println("Epoch $epoch | Time = $(round(dtime, digits=1))s | Cost = $(round(curr_C, digits=2))")
+                    println(
+                        "Epoch $epoch | Time = $(round(dtime, digits=1))s | Cost = $(round(curr_C, digits=2))",
+                    )
                 end
 
                 # evaluate if best model
