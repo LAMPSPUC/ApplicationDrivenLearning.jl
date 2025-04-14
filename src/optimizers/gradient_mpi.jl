@@ -106,7 +106,10 @@ function train_with_gradient_mpi!(
                 # store and print cost
                 trace[epoch] = curr_C
                 if verbose
-                    println("Epoch $epoch | Cost = $(round(curr_C, digits=2))")
+                    dtime = time() - start_time
+                    println(
+                        "Epoch $epoch | Time = $(round(dtime, digits=1))s | Cost = $(round(curr_C, digits=2))",
+                    )
                 end
 
                 # evaluate if best model
@@ -128,6 +131,9 @@ function train_with_gradient_mpi!(
         # release workers
         is_done = true
         MPI.bcast(is_done, MPI.COMM_WORLD)
+
+        # fix best model
+        apply_params(model.forecast, best_θ)
 
     elseif JQM.is_worker_process()
         # continuoslly call pmap until controller is done
