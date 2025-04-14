@@ -42,14 +42,14 @@ for z=1:pd.n_zones
     zone_rup = (size(pd.gen_of_zone[z], 1) > 0 ? sum(rup[i].plan for i in pd.gen_of_zone[z]) : 0.0)
     @constraint(
         ADL.Plan(model), 
-        zone_rup + ru_shed[z] - ru_spil[z] == res_up[z].plan,
+        zone_rup + ru_shed[z] - ru_spil[z] == res_up[z].plan * std_Y[pd.n_demand+z] + mu_Y[pd.n_demand+z],
         base_name="con_reserve_up_zone_$z"
     )
 
     zone_rdn = (size(pd.gen_of_zone[z], 1) > 0 ? sum(rdn[i].plan for i in pd.gen_of_zone[z]) : 0.0)
     @constraint(
         ADL.Plan(model), 
-        zone_rdn + rd_shed[z] - rd_spil[z] == res_dn[z].plan,
+        zone_rdn + rd_shed[z] - rd_spil[z] == res_dn[z].plan * std_Y[pd.n_demand+pd.n_zones+z] + mu_Y[pd.n_demand+pd.n_zones+z],
         base_name="con_reserve_down_zone_$z"
     )
 end
@@ -57,7 +57,13 @@ end
 # bus demand balance
 for b=1:pd.n_buses
     lod = pd.bus_to_load[b]
-    bus_dem = (lod > 0 ? pd.load_scaling[lod] * demand[pd.load_to_demand[lod]].plan : 0.0)
+    if lod > 0
+        demand_idx = pd.load_to_demand[lod]
+        D = demand[demand_idx].plan * std_Y[demand_idx] + mu_Y[demand_idx]
+        bus_dem = (lod > 0 ? pd.load_scaling[lod] * D : 0.0)
+    else
+        bus_dem = 0.0
+    end
     bus_gen = (size(pd.gen_of_bus[b], 1) > 0 ? sum(gen[i].plan for i in pd.gen_of_bus[b]) : 0.0)
     bus_f1 = (size(pd.line_from_bus[b], 1) > 0 ? sum(f[i] for i in pd.line_from_bus[b]) : 0.0)
     bus_f2 = (size(pd.line_to_bus[b], 1) > 0 ? sum(f[i] for i in pd.line_to_bus[b]) : 0.0)
@@ -105,7 +111,13 @@ end)
 # bus demand balance
 for b=1:pd.n_buses
     lod = pd.bus_to_load[b]
-    bus_dem = (lod > 0 ? pd.load_scaling[lod] * demand[pd.load_to_demand[lod]].assess : 0.0)
+    if lod > 0
+        demand_idx = pd.load_to_demand[lod]
+        D = demand[demand_idx].assess * std_Y[demand_idx] + mu_Y[demand_idx]
+        bus_dem = (lod > 0 ? pd.load_scaling[lod] * D : 0.0)
+    else
+        bus_dem = 0.0
+    end
     bus_gen = (size(pd.gen_of_bus[b], 1) > 0 ? sum(gen_real_time[i] for i in pd.gen_of_bus[b]) : 0.0)
     bus_f1 = (size(pd.line_from_bus[b], 1) > 0 ? sum(f[i] for i in pd.line_from_bus[b]) : 0.0)
     bus_f2 = (size(pd.line_to_bus[b], 1) > 0 ? sum(f[i] for i in pd.line_to_bus[b]) : 0.0)

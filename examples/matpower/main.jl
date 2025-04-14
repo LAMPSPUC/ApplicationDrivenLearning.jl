@@ -18,8 +18,8 @@ JQM = JobQueueMPI
 
 include("config.jl")
 include("utils/struct.jl")
-include("utils/model.jl")
 include("utils/data.jl")
+include("utils/model.jl")
 include("utils/pretrain.jl")
 
 # least-squares model

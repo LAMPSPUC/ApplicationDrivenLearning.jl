@@ -23,8 +23,8 @@ gradient_mode = false
 neldermead_mode = false
 
 include("utils/struct.jl")
-include("utils/model.jl")
 include("utils/data.jl")
+include("utils/model.jl")
 include("utils/pretrain.jl")
 
 gradient_model_state = joinpath(result_path, "model_state_gd.jld2")
@@ -69,22 +69,24 @@ gd_pred_test = model.forecast(X_test')'
 gd_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
 
 # get NM model
-models_state = JLD2.load(neldermead_model_state, "state")
-Flux.loadmodel!(nns, models_state);
-pred_model = ADL.PredictiveModel(
-    nns, 
-    input_output_map, 
-    lags*pd.n_demand+1, 
-    pd.n_demand+2*pd.n_zones
-)
-ADL.set_forecast_model(
-    model,
-    deepcopy(pred_model)
-)
-nm_pred_train = model.forecast(X_train')'
-nm_cost_train = ADL.compute_cost(model, X_train, Y_train, false, false)
-nm_pred_test = model.forecast(X_test')'
-nm_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
+if N_HIDDEN_LAYERS == 0
+    models_state = JLD2.load(neldermead_model_state, "state")
+    Flux.loadmodel!(nns, models_state);
+    pred_model = ADL.PredictiveModel(
+        nns, 
+        input_output_map, 
+        lags*pd.n_demand+1, 
+        pd.n_demand+2*pd.n_zones
+    )
+    ADL.set_forecast_model(
+        model,
+        deepcopy(pred_model)
+    )
+    nm_pred_train = model.forecast(X_train')'
+    nm_cost_train = ADL.compute_cost(model, X_train, Y_train, false, false)
+    nm_pred_test = model.forecast(X_test')'
+    nm_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
+end
 
 dataframe = DataFrame(
     model=String[],
@@ -107,13 +109,15 @@ push!(dataframe, (
     mean(sum((gd_pred_train' .- Y_train') .^2, dims=1)),
     mean(sum((gd_pred_test' .- Y_test') .^2, dims=1)),
 ))
-push!(dataframe, (
-    "NM",
-    mean(nm_cost_train),
-    mean(nm_cost_test),
-    mean(sum((nm_pred_train' .- Y_train') .^2, dims=1)),
-    mean(sum((nm_pred_test' .- Y_test') .^2, dims=1)),
-))
+if N_HIDDEN_LAYERS == 0
+    push!(dataframe, (
+        "NM",
+        mean(nm_cost_train),
+        mean(nm_cost_test),
+        mean(sum((nm_pred_train' .- Y_train') .^2, dims=1)),
+        mean(sum((nm_pred_test' .- Y_test') .^2, dims=1)),
+    ))
+end
 println(dataframe)
 CSV.write(joinpath(result_path, "costs.csv"), dataframe)
 
@@ -122,11 +126,13 @@ N = pd.n_demand
 Y = vcat(Y_train, Y_test)
 ls_pred = vcat(ls_pred_train, ls_pred_test)
 gd_pred = vcat(gd_pred_train, gd_pred_test)
-nm_pred = vcat(nm_pred_train, nm_pred_test)
 fig = plot(Y[:, 1:N], layout=N, alpha=.7, xticks=false, label="Demand")
 plot!(ls_pred[:, 1:N], layout=N, alpha=.7, xticks=false, label="LS")
 plot!(gd_pred[:, 1:N], layout=N, alpha=.7, xticks=false, label="GD")
-plot!(nm_pred[:, 1:N], layout=N, alpha=.7, xticks=false,  label="NM")
+if N_HIDDEN_LAYERS == 0
+    nm_pred = vcat(nm_pred_train, nm_pred_test)
+    plot!(nm_pred[:, 1:N], layout=N, alpha=.7, xticks=false,  label="NM")
+end
 plot!(
     ones((2, N)) .* TRAIN_SIZE, 
     vcat(minimum(Y, dims=1), maximum(Y, dims=1)),
@@ -138,10 +144,23 @@ plot!(legend=:bottomleft, size=(1200, 800))
 plot!(titlefontsize=12, tickfontsize=10, guidefontsize=10, legendfontsize=10)
 savefig(fig, joinpath(imgs_path, "predictions.png"))
 
+# plot error histogram
+fig = histogram(mean((ls_pred_test - Y_test)[:, 1:pd.n_demand], dims=2), label="LS", alpha=.7)
+histogram!(mean((gd_pred_test - Y_test)[:, 1:pd.n_demand], dims=2), label="GD", alpha=.7)
+if N_HIDDEN_LAYERS == 0
+    histogram!(mean((nm_pred_test - Y_test)[:, 1:pd.n_demand], dims=2), label="NM", alpha=.7)
+end
+plot!(xlabel="Error", ylabel="Frequency", title="Test Error Histogram")
+plot!(legend=:topright, size=(1200, 800))
+plot!(titlefontsize=12, tickfontsize=10, guidefontsize=10, legendfontsize=10)
+savefig(fig, joinpath(imgs_path, "error_histogram.png"))
+
 # plot costs
 fig2 = plot(vcat(ls_cost_train, ls_cost_test), label="LS", alpha=.7)
 plot!(vcat(gd_cost_train, gd_cost_test), label="GD", alpha=.7)
-plot!(vcat(nm_cost_train, nm_cost_test), label="NM", alpha=.7)
+if N_HIDDEN_LAYERS == 0
+    plot!(vcat(nm_cost_train, nm_cost_test), label="NM", alpha=.7)
+end
 plot!([TRAIN_SIZE, TRAIN_SIZE], [0, maximum(ls_cost_test)], color=:red, label="")
 savefig(fig2, joinpath(imgs_path, "costs.png"))
 

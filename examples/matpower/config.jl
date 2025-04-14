@@ -1,6 +1,23 @@
+# this config file is used to set the parameters for the experiment
+
+run_mode = 2  # 1: pretrain, 2: gradient, 3: neldermead
+
 pretrain = false
-gradient_mode = true
+gradient_mode = false
 neldermead_mode = false
+
+if run_mode == 1
+    pretrain = true
+    println("Pretrain mode")
+elseif run_mode == 2
+    gradient_mode = true
+    println("Gradient mode")
+elseif run_mode == 3
+    neldermead_mode = true
+    println("NelderMead mode")
+else
+    error("Invalid option")
+end
 
 CASE_NAME = "pglib_opf_case24_ieee_rts"
 N_LAGS = 24
@@ -14,12 +31,12 @@ TEST_SIZE = 7 * 24
 SIM_SLICES = 3 * 64
 
 N_HIDDEN_LAYERS = 0
-HIDDEN_SIZE = 16
+HIDDEN_SIZE = 64
 
 # pretrain parameters
 PRETRAIN_EPOCHS = 10_000
 PRETRAIN_MAX_TIME = 60
-PRETRAIN_LEARNING_RATE = 2e-2
+PRETRAIN_LEARNING_RATE = 1e-2
 PRETRAIN_BATCH_SIZE = -1
 
 # opt train parameters

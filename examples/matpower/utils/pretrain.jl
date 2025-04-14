@@ -2,17 +2,17 @@
 
 if N_HIDDEN_LAYERS == 0
     nns = [
-        Flux.Chain(Flux.Dense(lags => 1), NNlib.leakyrelu),
-        Flux.Chain(Flux.Dense(1 => 20; bias=false), NNlib.leakyrelu),
+        Flux.Chain(Flux.Dense(lags => 1)),
+        Flux.Chain(Flux.Dense(1 => 20; bias=false),),
     ]
 else
     nns = [
         Flux.Chain(
-            Flux.Dense(lags => HIDDEN_SIZE), NNlib.leakyrelu,
-            [Flux.Dense(HIDDEN_SIZE => HIDDEN_SIZE, NNlib.leakyrelu) for _=1:N_HIDDEN_LAYERS-1]...,
+            Flux.Dense(lags => HIDDEN_SIZE), Flux.relu,
+            [Flux.Dense(HIDDEN_SIZE => HIDDEN_SIZE, Flux.relu) for _=1:N_HIDDEN_LAYERS-1]...,
             Flux.Dense(HIDDEN_SIZE => 1),
         ),
-        Flux.Chain(Flux.Dense(1 => 20; bias=false, ), NNlib.leakyrelu),
+        Flux.Chain(Flux.Dense(1 => 20; bias=false, ),),
     ]
 end
 input_output_map = [
@@ -49,7 +49,7 @@ if pretrain
         err = err2
 
         if epoch % 50 == 0
-            println("Epoch $epoch | Err = $(round(err, digits=2))")
+            println("Epoch $epoch | Err = $(round(err, digits=4))")
         end
         epoch += 1
 

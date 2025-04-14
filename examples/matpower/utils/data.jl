@@ -29,3 +29,21 @@ end
 
 X_train, Y_train = get_matrices_data(ts.d_train, θru_st, θrd_st)
 X_test, Y_test = get_matrices_data(ts.d_test, θru_st, θrd_st)
+
+# normalize data
+mu_X = mean(X_train, dims=1)
+mu_X[end] = 0.0
+
+std_X = std(X_train, dims=1)
+std_X[std_X .== 0] .= 1.0
+
+mu_Y = mean(Y_train, dims=1)
+
+std_Y = std(Y_train, dims=1)
+std_Y[std_Y .== 0] .= 1.0
+
+X_train = (X_train .- mu_X) ./ std_X
+X_test = (X_test .- mu_X) ./ std_X
+
+Y_train = (Y_train .- mu_Y) ./ std_Y
+Y_test = (Y_test .- mu_Y) ./ std_Y
