@@ -83,6 +83,7 @@ function compute_cost(
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
     with_gradients::Bool = false,
+    aggregate::Bool = true,
 )
 
     # data size assertions
@@ -93,9 +94,9 @@ function compute_cost(
     build(model)
 
     # init parameters
-    C = 0
     T = size(Y)[1]
-    dC = zeros(model.forecast.output_size)
+    C = zeros(T)
+    dC = zeros((T, model.forecast.output_size))
     dCdz = Vector{Float32}(undef, size(model.policy_vars, 1))
     dCdy = Vector{Float32}(undef, model.forecast.output_size)
 
@@ -114,8 +115,14 @@ function compute_cost(
     # main loop to compute cost
     for t = 1:T
         result = _compute_step(Y[t, :], Yhat[t, :])
-        C += result[1] ./ T
-        dC .+= result[2] ./ T
+        C[t] += result[1]
+        dC[t, :] .+= result[2]
+    end
+
+    # aggregate cost if requested
+    if aggregate
+        C = sum(C) / T
+        dC = sum(dC, dims = 1)[1, :] / T
     end
 
     if with_gradients
