@@ -1,6 +1,6 @@
 # this config file is used to set the parameters for the experiment
 
-run_mode = 2  # 1: pretrain, 2: gradient, 3: neldermead
+run_mode = 3  # 1: pretrain, 2: gradient, 3: neldermead
 
 pretrain = false
 gradient_mode = false
@@ -19,15 +19,15 @@ else
     error("Invalid option")
 end
 
-CASE_NAME = "pglib_opf_case24_ieee_rts"
+CASE_NAME = "pglib_opf_case300_ieee"
 N_LAGS = 24
 N_DEMANDS = 20
 N_ZONES = 10
 COEF_VARIATION = 0.4
 DEFF_COEF = 8.0
 SPILL_COEF = 3.0
-TRAIN_SIZE = 29 * 24
-TEST_SIZE = 7 * 24
+TRAIN_SIZE = 1200
+TEST_SIZE = 360
 SIM_SLICES = 3 * 64
 
 N_HIDDEN_LAYERS = 0
@@ -36,7 +36,7 @@ HIDDEN_SIZE = 64
 # pretrain parameters
 PRETRAIN_EPOCHS = 10_000
 PRETRAIN_MAX_TIME = 60
-PRETRAIN_LEARNING_RATE = 1e-2
+PRETRAIN_LEARNING_RATE = 1e-1
 PRETRAIN_BATCH_SIZE = -1
 
 # opt train parameters

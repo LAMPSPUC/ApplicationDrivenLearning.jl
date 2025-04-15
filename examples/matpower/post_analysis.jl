@@ -185,7 +185,7 @@ dataframe = DataFrame(
     cost_spl=Float64[],
     cost_total=Float64[],
 )
-for t=1:size(X_train, 1)
+for t=1:TRAIN_SIZE
     cost_total = ADL.compute_cost(model, X_train[[t], :], Y_train[[t], :])
     push!(dataframe, (
         "train",
@@ -196,7 +196,7 @@ for t=1:size(X_train, 1)
         cost_total
     ))
 end
-for t=1:size(X_test, 1)
+for t=1:TEST_SIZE
     cost_total = ADL.compute_cost(model, X_test[[t], :], Y_test[[t], :])
     push!(dataframe, (
         "test",
