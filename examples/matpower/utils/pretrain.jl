@@ -36,6 +36,7 @@ if pretrain
     local init_time = time()
     local err = 1e8
     local err_var = 1e8
+    local stable_iters = 0
     while (epoch <= PRETRAIN_EPOCHS)
         Flux.train!(nns, train_data, opt_state) do m, x, y
             sum(
@@ -47,6 +48,16 @@ if pretrain
         err2 = mean(sum((nns[1](X_train[:, lags*(d-1)+1:lags*(d-1)+lags]') - Y_train[:, d]').^2 for d=1:pd.n_demand))
         err_var = abs(err - err2)
         err = err2
+
+        if err_var < 1e-8
+            stable_iters += 1
+        else
+            stable_iters = 0
+        end
+        if stable_iters > 30
+            println("Pre-training converged after $epoch epochs.")
+            break
+        end
 
         if epoch % 50 == 0
             println("Epoch $epoch | Err = $(round(err, digits=4))")
