@@ -28,6 +28,7 @@ pd, ts = convert_matpower(
     TRAIN_SIZE,  # train_dataset_size_current
     1  # sample_current
 )
+pd.F *= (0.95 ^ TRASMISSION_REDUCTION)
 
 # 'ts' d_train and d_test comes from demand file values multiplied by expected values
 
