@@ -1,6 +1,6 @@
 # this config file is used to set the parameters for the experiment
 
-run_mode = 3  # 1: pretrain, 2: gradient, 3: neldermead
+run_mode = 1  # 1: pretrain, 2: gradient, 3: neldermead
 
 pretrain = false
 gradient_mode = false
@@ -20,7 +20,7 @@ else
 end
 
 CASE_NAME = "pglib_opf_case300_ieee"
-N_LAGS = 24
+N_LAGS = 1
 N_DEMANDS = 20
 N_ZONES = 10
 COEF_VARIATION = 0.4
@@ -51,7 +51,7 @@ TIME_LIMIT = 60*60
 case_path = joinpath(@__DIR__, "data", "cases", CASE_NAME * ".m")
 
 # demand file path
-demand_path = joinpath(@__DIR__, "data", "demand.csv")
+demand_path = N_LAGS == 1 ? "" : joinpath(@__DIR__, "data", "demand.csv")
 
 # results path
 result_path = joinpath(@__DIR__, "data", "results", CASE_NAME, "size_$N_HIDDEN_LAYERS")

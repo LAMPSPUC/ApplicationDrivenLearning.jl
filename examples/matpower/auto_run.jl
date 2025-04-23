@@ -32,7 +32,7 @@ for i=1:size(dotm_files, 1)
         "r+"
     ) do file
         content = read(file, String)
-        new_content = replace(content, "run_mode = 3" => "run_mode = 1")
+        new_content = replace(content, r"run_mode = \d" => "run_mode = 1")
         seek(file, 0)
         write(file, new_content)
     end
@@ -44,23 +44,25 @@ for i=1:size(dotm_files, 1)
         "r+"
     ) do file
         content = read(file, String)
-        new_content = replace(content, "run_mode = 1" => "run_mode = 2")
+        new_content = replace(content, r"run_mode = \d" => "run_mode = 2")
         seek(file, 0)
         write(file, new_content)
     end
     JQM.mpiexec(exe -> run(`$exe -n 12 $(Base.julia_cmd()) --project main.jl`))
 
     ## nelder-mead
-    open(
-        joinpath(@__DIR__, "config.jl"),
-        "r+"
-    ) do file
-        content = read(file, String)
-        new_content = replace(content, "run_mode = 2" => "run_mode = 3")
-        seek(file, 0)
-        write(file, new_content)
+    if N_HIDDEN_LAYERS == 0
+        open(
+            joinpath(@__DIR__, "config.jl"),
+            "r+"
+        ) do file
+            content = read(file, String)
+            new_content = replace(content, r"run_mode = \d" => "run_mode = 3")
+            seek(file, 0)
+            write(file, new_content)
+        end
+        JQM.mpiexec(exe -> run(`$exe -n 12 $(Base.julia_cmd()) --project main.jl`))
     end
-    JQM.mpiexec(exe -> run(`$exe -n 12 $(Base.julia_cmd()) --project main.jl`))
 
     ## post analysis
     include("post_analysis.jl")
