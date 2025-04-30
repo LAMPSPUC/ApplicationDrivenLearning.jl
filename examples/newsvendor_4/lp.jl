@@ -1,9 +1,6 @@
 function init_newsvendor_model(I, Optimizer, allow_trade::Bool=false)
     # get problem data
     c, q, r = generate_problem_data(I)
-    println("c=$c")
-    println("q=$q")
-    println("r=$r")
     # mount ADL model
     model = ApplicationDrivenLearning.Model()
     @variables(model, begin

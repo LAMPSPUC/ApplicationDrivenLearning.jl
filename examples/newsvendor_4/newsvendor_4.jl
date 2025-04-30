@@ -27,48 +27,87 @@ for I in I_space
     X_train, Y_train = generate_series_data(I, T_train, r, p)
     X_test, Y_test = generate_series_data(I, T_test, r, p)
 
+    # normalize regressors
+    mu_X = mean(X_train, dims=1)
+    std_X = std(X_train, dims=1)
+    X_train = (X_train .- mu_X) ./ std_X
+    X_test = (X_test .- mu_X) ./ std_X
+
     # init model
     model = init_newsvendor_model(I, Gurobi.Optimizer);
+    ref_costs = nothing
 
     for n_hidden_layers in n_hidden_layers_space
         # start model
-        ls_nn = get_nn(p, I, n_hidden_layers, hidden_layers_size)
-        layers_size = size.(Flux.params(ls_nn))
-        n_params = sum(prod.(layers_size))
+        println("\nStarting model with I = $I and n_hidden_layers = $n_hidden_layers")
+        ls_nns = get_nns(p, I, n_hidden_layers, hidden_layers_size)
+        layers_size = size.(Flux.params(ls_nns[1]))
+        n_params = sum(prod.(layers_size)) * I
     
         # train nn with least-squares
         t0 = time()
-        if n_hidden_layers == 0
-            ls_θ = get_ls_solution(X_train, Y_train)
-            Flux.params(ls_nn)[1] .= ls_θ
+        
+        # from jump formulation
+        if (n_hidden_layers == 0)
+            ls_θ, ref_costs = get_ls_solution(X_train, Y_train)
+            for i=1:I
+                ls_nns[i][1].weight .= ls_θ[i, 1:p]'
+                ls_nns[i][1].bias .= ls_θ[i, p+1]'
+            end
+        
+        # from flux training
         else
-            train_nn(ls_nn, X_train, Y_train, Flux.Adam(), max_iter, pretrain_time_limit)
+            for i=1:I
+                tries = 0
+                success = false
+                while (!success) && (tries < max_pretrain_tries)
+                    tries += 1
+                    i_err = train_single_nn(
+                        ls_nns[i], 
+                        X_train[:, (i-1)*p+1:i*p], 
+                        Y_train[:, i], 
+                        Flux.AdamW(), 
+                        max_iter_pretrain, 
+                        pretrain_time_limit / I
+                    )
+                    success = i_err < ref_costs[i]
+                    if (!success) && (tries < max_pretrain_tries)
+                        # println("Pre-training failed for network $i. Trying again...")
+                        ls_nns[i] = get_single_nn(p, n_hidden_layers, hidden_layers_size)
+                    end
+                    println("Pre-training for network $i completed with error $(round(i_err, digits=2)).")
+                end
+            end
         end
         time_ls = time() - t0
         
         # set forecast model
-        input_output_map = Dict(collect(1:size(X_train, 2)) => collect(1:size(Y_train, 2)))
-        ApplicationDrivenLearning.set_forecast_model(
-            model,
-            ApplicationDrivenLearning.PredictiveModel(deepcopy(ls_nn), input_output_map),
-            
+        input_output_maps = [
+            Dict(collect((i-1)*p+1:i*p) => [i])
+            for i=1:I
+        ]
+        forecaster = ApplicationDrivenLearning.PredictiveModel(
+            deepcopy(ls_nns), input_output_maps, p*I, I
         )
+        ApplicationDrivenLearning.set_forecast_model(model, forecaster)
 
         # ls prediction
         yhat_ls_train = model.forecast(X_train')'
-        yerr_ls_train = Statistics.mean(sum((yhat_ls_train - Y_train).^2, dims=2))
+        yerr_ls_train = sum((yhat_ls_train - Y_train).^2) / (I*T_train)
         cost_ls_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
         yhat_ls_test = model.forecast(X_test')'
-        yerr_ls_test = Statistics.mean(sum((yhat_ls_test - Y_test).^2, dims=2))
+        yerr_ls_test = sum((yhat_ls_test - Y_test).^2) / (I*T_test)
         cost_ls_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
 
         # train with bilevel mode
-        if n_hidden_layers == 0
+        if (n_hidden_layers == 0) && (I == 1)
             # set forecast model without relu
+            nns_without_relu = [Flux.Chain(nn[1]) for nn in ls_nns]
             ApplicationDrivenLearning.set_forecast_model(
-                model,
-                ApplicationDrivenLearning.PredictiveModel(deepcopy(Flux.Chain(ls_nn[1]))),
-                
+                model, 
+                ApplicationDrivenLearning.PredictiveModel(
+                    deepcopy(nns_without_relu), input_output_maps, p*I, I
+                )
             )
             t0 = time()
             bl_sol = ApplicationDrivenLearning.train!(
@@ -81,10 +120,10 @@ for I in I_space
             )
             time_bl = time() - t0
             yhat_bl_train = model.forecast(X_train')'
-            yerr_bl_train = Statistics.mean(sum((yhat_bl_train - Y_train).^2, dims=2))
+            yerr_bl_train = sum((yhat_bl_train - Y_train).^2) / (I*T_train)
             cost_bl_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
             yhat_bl_test = model.forecast(X_test')'
-            yerr_bl_test = Statistics.mean(sum((yhat_bl_test - Y_test).^2, dims=2))
+            yerr_bl_test = sum((yhat_bl_test - Y_test).^2) / (I*T_test)
             cost_bl_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
         else
             time_bl = NaN
@@ -99,10 +138,9 @@ for I in I_space
         # train with nelder mead
         if n_params <= max_params_nelder_mead
             ApplicationDrivenLearning.set_forecast_model(
-                model,
+                model, 
                 ApplicationDrivenLearning.PredictiveModel(
-                    deepcopy(ls_nn), 
-                    input_output_map
+                    deepcopy(ls_nns), input_output_maps, p*I, I
                 )
             )
             t0 = time()
@@ -118,10 +156,10 @@ for I in I_space
             )
             time_nm = time() - t0
             yhat_nm_train = model.forecast(X_train')'
-            yerr_nm_train = Statistics.mean(sum((yhat_nm_train - Y_train).^2, dims=2))
+            yerr_nm_train = sum((yhat_nm_train - Y_train).^2) / (I*T_train)
             cost_nm_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
             yhat_nm_test = model.forecast(X_test')'
-            yerr_nm_test = Statistics.mean(sum((yhat_nm_test - Y_test).^2, dims=2))
+            yerr_nm_test = sum((yhat_nm_test - Y_test).^2) / (I*T_test)
             cost_nm_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
         else
             time_nm = NaN
@@ -135,8 +173,10 @@ for I in I_space
 
         # train with gradient descent
         ApplicationDrivenLearning.set_forecast_model(
-            model,
-            ApplicationDrivenLearning.PredictiveModel(deepcopy(ls_nn), input_output_map)
+            model, 
+            ApplicationDrivenLearning.PredictiveModel(
+                deepcopy(ls_nns), input_output_maps, p*I, I
+            )
         )
         t0 = time()
         gd_sol = ApplicationDrivenLearning.train!(
@@ -152,10 +192,10 @@ for I in I_space
         )
         time_gd = time() - t0
         yhat_gd_train = model.forecast(X_train')'
-        yerr_gd_train = Statistics.mean(sum((yhat_gd_train - Y_train).^2, dims=2))
+        yerr_gd_train = sum((yhat_gd_train - Y_train).^2) / (I*T_train)
         cost_gd_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
         yhat_gd_test = model.forecast(X_test')'
-        yerr_gd_test = Statistics.mean(sum((yhat_gd_test - Y_test).^2, dims=2))
+        yerr_gd_test = sum((yhat_gd_test - Y_test).^2) / (I*T_test)
         cost_gd_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
 
         push!(rows, (

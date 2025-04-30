@@ -35,7 +35,7 @@ function generate_ar_p(T::Int, p::Int, μ::Float64=10.0, σ::Float64=2.0)
     # Generate demand series using AR(p) recursion
     for t in (p+1):T
         demand[t] = (
-            sum(α[i] * demand[t-i] for i in 1:p) + 
+            sum(α[i] * demand[t-i]^2 for i in 1:p)^0.5 + 
             rand(Distributions.Normal(0.0, σ))
         )
     end
