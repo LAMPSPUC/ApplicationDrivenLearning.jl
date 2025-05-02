@@ -14,6 +14,7 @@ ApplicationDrivenLearning.set_forecast_model(model, Chain(Dense(1 => 1)))
 
 @testset "GradientMode Stop Rules" begin
     # epochs
+    initial_sol = ApplicationDrivenLearning.extract_params(model.forecast)
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.GradientMode,
         epochs = 0,
@@ -22,7 +23,6 @@ ApplicationDrivenLearning.set_forecast_model(model, Chain(Dense(1 => 1)))
     @test initial_sol == sol.params
 
     # time_limit
-    initial_sol = ApplicationDrivenLearning.extract_params(model.forecast)
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.GradientMode,
         time_limit = 0,
