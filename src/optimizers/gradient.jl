@@ -34,6 +34,7 @@ function train_with_gradient!(
     verbose = get(params, :verbose, true)
     compute_cost_every = get(params, :compute_cost_every, 1)
     time_limit = get(params, :time_limit, Inf)
+    g_tol = get(params, :g_tol, 0)
 
     # init parameters
     start_time = time()
@@ -87,6 +88,17 @@ function train_with_gradient!(
 
         # check time limit reach
         if time() - start_time > time_limit
+            if verbose
+                println("Time limit reached.")
+            end
+            break
+        end
+
+        # check gradient tolerance
+        if maximum(abs.(dC)) < g_tol
+            if verbose
+                println("Gradient tolerance reached.")
+            end
             break
         end
 

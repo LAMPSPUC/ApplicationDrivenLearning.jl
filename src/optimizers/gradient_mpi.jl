@@ -17,6 +17,7 @@ function train_with_gradient_mpi!(
     compute_cost_every = get(params, :compute_cost_every, 1)
     mpi_finalize = get(params, :mpi_finalize, true)
     time_limit = get(params, :time_limit, Inf)
+    g_tol = get(params, :g_tol, 0)
 
     JQM.mpi_init()
 
@@ -24,7 +25,7 @@ function train_with_gradient_mpi!(
     start_time = time()
     is_done = false
     best_C = Inf
-    best_θ = []
+    best_θ = extract_params(model.forecast)
     curr_C = 0.0
     trace = Array{Float64}(undef, epochs)
     dCdz = Vector{Float32}(undef, size(model.policy_vars, 1))
@@ -121,6 +122,17 @@ function train_with_gradient_mpi!(
 
             # check time limit reach
             if time() - start_time > time_limit
+                if verbose
+                    println("Time limit reached.")
+                end
+                break
+            end
+
+            # check gradient tolerance
+            if maximum(abs.(dCdy)) < g_tol
+                if verbose
+                    println("Gradient tolerance reached.")
+                end
                 break
             end
 

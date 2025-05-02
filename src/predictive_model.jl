@@ -63,8 +63,9 @@ When only one network is passed as a Chain object, input and output
 indexes are directly extracted.
 """
 function PredictiveModel(network::Flux.Chain)
-    input_size = size(network[1].weight)[2]
-    output_size = size(network[end].weight)[1]
+    param_layers = [layer for layer in network if has_params(layer)]
+    input_size = size(param_layers[1].weight, 2)
+    output_size = size(param_layers[end].weight, 1)
     input_output_map = [Dict(collect(1:input_size) => collect(1:output_size))]
     return PredictiveModel(
         [deepcopy(network)],
