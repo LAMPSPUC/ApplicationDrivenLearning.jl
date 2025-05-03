@@ -22,7 +22,7 @@ function generate_inar_p_poisson(T::Int, p::Int, init_delta::Int=200)
     return demand[init_delta+1:end]
 end
 
-function generate_ar_p(T::Int, p::Int, μ::Float64=10.0, σ::Float64=2.0)
+function generate_ar_p(T::Int, p::Int, μ::Float64=10.0, σ::Float64=3.0)
     α = rand(Distributions.Uniform(0.1, 1.0), p)
     α = 1.0 * α ./ sum(α)  # Normalize to sum to 1
     demand = Vector{Float32}(undef, T)
@@ -69,15 +69,15 @@ Para I=2:
         acima: -μ+1 = -(μ-1)
         abaixo: μ - (μ+1) = -1
 """
-function generate_problem_data(I, μ=5.0)
+function generate_problem_data(I, μ=10.0)
     if I == 2
         c = [μ, μ]
         q = [2*μ-1, μ + 1]
         r = [μ - 1, 1.0]
     else
         c = μ * ones(I)
-        q = c .+ rand(Distributions.DiscreteUniform(1, μ), I)
-        r = max.(1, c .- rand(Distributions.DiscreteUniform(1, μ), I))
+        r = rand((1.0, μ-1), I)
+        q = c .+ r
     end
 
     return c, q, r

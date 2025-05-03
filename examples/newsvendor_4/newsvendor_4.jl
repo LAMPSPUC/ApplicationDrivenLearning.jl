@@ -15,7 +15,7 @@ include("lp.jl")
 include("ls.jl")
 
 # paths
-IMGS_PATH = joinpath(@__DIR__, "imgs")
+IMGS_PATH = joinpath(@__DIR__, "results")
 if !isdir(IMGS_PATH)
     mkdir(IMGS_PATH)
 end
@@ -152,6 +152,7 @@ for I in I_space
                     show_trace=true, 
                     show_every=compute_every,
                     time_limit=time_limit,
+                    g_tol=g_tol
                 )
             )
             time_nm = time() - t0
@@ -178,6 +179,9 @@ for I in I_space
                 deepcopy(ls_nns), input_output_maps, p*I, I
             )
         )
+        if lr == "by_size"
+            lr = 10.0^(-n_hidden_layers-1)
+        end
         t0 = time()
         gd_sol = ApplicationDrivenLearning.train!(
             model, X_train, Y_train,
@@ -187,7 +191,8 @@ for I in I_space
                 batch_size=batch_size,
                 compute_cost_every=compute_every,
                 epochs=max_iter,
-                time_limit=time_limit
+                time_limit=time_limit,
+                g_tol=g_tol
             )
         )
         time_gd = time() - t0
