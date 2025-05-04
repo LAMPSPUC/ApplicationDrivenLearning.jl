@@ -1,5 +1,6 @@
 import CSV
 import Flux
+import Optim
 import Gurobi
 import Random
 using JuMP
@@ -134,7 +135,7 @@ function get_optmodel(c_train)
         end
     end
     @objective(ApplicationDrivenLearning.Plan(optmodel), Min, c_plan_set'x_plan_set)
-    @objective(ApplicationDrivenLearning.ApplicationDrivenLearning.Assess(optmodel), Min, c_assess_set'x_assess_set)
+    @objective(ApplicationDrivenLearning.Assess(optmodel), Min, c_assess_set'x_assess_set)
     set_optimizer(optmodel, Gurobi.Optimizer)
     set_silent(optmodel)
 
@@ -156,9 +157,11 @@ nm_sol = ApplicationDrivenLearning.train!(
     optmodel, x_train, c_train,
     ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode,
+        initial_simplex=Optim.AffineSimplexer(0.9, 0.1),
         iterations=1_000, 
         show_trace=true, 
-        show_every=1,
+        show_every=5,
+        g_tol=1e-2,
         time_limit=60,
     )
 )

@@ -20,13 +20,20 @@ costs_2.adl_regret = (costs_2.test_cost - costs_2.opt_cost) ./ costs_2.opt_cost
 costs_2.pyepo_regret = (costs_2.pyepo_cost - costs_2.opt_cost) ./ costs_2.opt_cost
 
 adl_avg_regret = round(mean(costs_2.adl_regret), digits=2)
+adl_median_regret = round(median(costs_2.adl_regret), digits=2)
+adl_std_regret = round(std(costs_2.adl_regret), digits=2)
 pyepo_avg_regret = round(mean(costs_2.pyepo_regret), digits=2)
+pyepo_median_regret = round(median(costs_2.pyepo_regret), digits=2)
+pyepo_std_regret = round(std(costs_2.pyepo_regret), digits=2)
+
+println("ADL Regret: avg=$adl_avg_regret, median=$adl_median_regret, std=$adl_std_regret")
+println("PyEPO Regret: avg=$pyepo_avg_regret, median=$pyepo_median_regret, std=$pyepo_std_regret")
 
 max_val = maximum(Array(costs_2[:, [:adl_regret, :pyepo_regret]]))
 bins = range(0, max_val, length=30)
 fig = plot(
     title="Normalized Regret Comparison",
-    xlabel="Normalized Regret (%)",
+    xlabel="Normalized Regret",
     ylabel="Frequency",
 )
 histogram!(costs_2.pyepo_regret, bins=bins, label="PyEPO (avg=$pyepo_avg_regret)", alpha=0.5)
@@ -37,7 +44,7 @@ fig = boxplot(
     [costs_2.pyepo_regret costs_2.adl_regret],
     label=["PyEPO (avg=$pyepo_avg_regret)" "ADL (avg=$adl_avg_regret)"],
     title="Normalized Regret Comparison",
-    ylabel="Normalized Regret (%)",
+    ylabel="Normalized Regret",
     xlabel="Package",
     legend=:topleft,
 )
