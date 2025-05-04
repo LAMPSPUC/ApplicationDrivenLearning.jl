@@ -9,7 +9,7 @@ np.random.seed(135)
 torch.manual_seed(135)
 
 # parameters
-m = 8 # number of items
+m = 32 # number of items
 n = 100 # number of data
 p = 5 # size of feature
 deg = 6 # polynomial degree

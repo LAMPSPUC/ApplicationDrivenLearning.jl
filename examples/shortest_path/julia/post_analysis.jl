@@ -30,7 +30,7 @@ println("ADL Regret: avg=$adl_avg_regret, median=$adl_median_regret, std=$adl_st
 println("PyEPO Regret: avg=$pyepo_avg_regret, median=$pyepo_median_regret, std=$pyepo_std_regret")
 
 max_val = maximum(Array(costs_2[:, [:adl_regret, :pyepo_regret]]))
-bins = range(0, max_val, length=30)
+bins = range(0, max_val*1.01, length=30)
 fig = plot(
     title="Normalized Regret Comparison",
     xlabel="Normalized Regret",

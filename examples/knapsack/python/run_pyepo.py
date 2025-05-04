@@ -55,7 +55,7 @@ def trainModel(reg, loss_func, method_name, num_epochs=40, lr=1e-1):
         # record regrer
         if epoch % 2 == 0:
             regret = pyepo.metric.regret(reg, optmodel, loader_test)
-            # print("Epoch {:2},  Loss: {:9.4f},  Regret: {:7.4f}%".format(epoch, loss.item(), regret*100))
+            print("Epoch {:2},  Loss: {:9.4f},  Regret: {:7.4f}%".format(epoch, loss.item(), regret*100))
             regret_log.append(regret)
 
 

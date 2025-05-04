@@ -16,7 +16,6 @@ OUTP_PATH = joinpath(DATA_PATH, "adl_result")
 
 # parameters
 train_size = 100
-I = 8 # number of items
 
 function get_data()
     # load data
@@ -39,7 +38,7 @@ end
 
 function pretrain_model(X, C, epochs=500, lr=1e-2, batchsize=32, verbose=true)
     # linear model
-    reg = Flux.Dense(size(X, 2) => I)
+    reg = Flux.Dense(size(X, 2) => size(C, 2))
     train_data = Flux.DataLoader((X', C'), batchsize=batchsize)
     opt_state = Flux.setup(Flux.Adam(lr), reg)
     for epoch=1:epochs
@@ -69,6 +68,7 @@ function get_solution(optmodel, X, C)
 end
 
 function get_optmodel(W, caps)
+    I = size(W, 1)
     # init optimization model
     optmodel = ApplicationDrivenLearning.Model()
     @variables(optmodel, begin
