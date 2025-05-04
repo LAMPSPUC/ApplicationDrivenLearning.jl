@@ -53,7 +53,7 @@ replace_I_with_count(plt_df)
     xlabel="Problem scale (I)",
     ylabel="Improvement (%)",
     legend=:topleft,
-    label=["Bilevel" "Nelder-Mead" "Gradient Descent"],
+    label=["Bilevel" "Gradient Descent" "Nelder-Mead"],
     ylims=(0, maximum(plt_df.value) * 1.3),
 )
 savefig(joinpath(IMGS_PATH, "train_improvement.png"))
@@ -80,7 +80,7 @@ replace_I_with_count(plt_df)
     xlabel="Problem scale (I)",
     ylabel="Improvement (%)",
     legend=:topleft,
-    label=["Bilevel" "Nelder-Mead" "Gradient Descent"],
+    label=["Bilevel" "Gradient Descent" "Nelder-Mead"],
     ylims=(0, maximum(plt_df.value) * 1.3),
 )
 savefig(joinpath(IMGS_PATH, "test_improvement.png"))
