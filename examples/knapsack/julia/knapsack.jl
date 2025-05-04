@@ -37,7 +37,7 @@ function get_data()
     return (W, caps, x_train, x_test, c_train, c_test)
 end
 
-function pretrain_model(X, C, epochs=100, lr=1e-1, batchsize=32, verbose=true)
+function pretrain_model(X, C, epochs=500, lr=1e-2, batchsize=32, verbose=true)
     # linear model
     reg = Flux.Dense(size(X, 2) => I)
     train_data = Flux.DataLoader((X', C'), batchsize=batchsize)
@@ -46,7 +46,7 @@ function pretrain_model(X, C, epochs=100, lr=1e-1, batchsize=32, verbose=true)
         Flux.train!(reg, train_data, opt_state) do m, x, y
             sum((m(x) .- y).^2)
         end
-        if verbose && (epoch % 10 == 0)
+        if verbose && (epoch % 100 == 0)
             println("Epoch $epoch | Squared-error: $(sum((reg(X') .- C').^2))")
         end
     end
