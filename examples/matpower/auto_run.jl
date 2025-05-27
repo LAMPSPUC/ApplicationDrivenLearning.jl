@@ -3,7 +3,7 @@ import JobQueueMPI
 JQM = JobQueueMPI
 
 dotm_files = [
-    "pglib_opf_case24_ieee_rts",
+    # "pglib_opf_case24_ieee_rts",
     "pglib_opf_case118_ieee",
     "pglib_opf_case300_ieee",
 ]

@@ -1,6 +1,6 @@
 # this config file is used to set the parameters for the experiment
 
-run_mode = 1  # 1: pretrain, 2: gradient, 3: neldermead
+run_mode = 3  # 1: pretrain, 2: gradient, 3: neldermead
 
 pretrain = false
 gradient_mode = false
@@ -27,17 +27,18 @@ COEF_VARIATION = 0.4
 DEFF_COEF = 8.0
 SPILL_COEF = 3.0
 TRAIN_SIZE = 1200
-TEST_SIZE = 360
+TEST_SIZE = 1200
 SIM_SLICES = 3 * 64
 TRASMISSION_REDUCTION = 1
 
+model_type = 1  # 1: univariate, 2: multivariate, 3: many-univariate
 N_HIDDEN_LAYERS = 0
 HIDDEN_SIZE = 64
 
 # pretrain parameters
 PRETRAIN_EPOCHS = 15_000
 PRETRAIN_MAX_TIME = 60*10
-PRETRAIN_LEARNING_RATE = 1e-2
+PRETRAIN_LEARNING_RATE = 1e-3
 PRETRAIN_BATCH_SIZE = -1
 
 # opt train parameters

@@ -88,6 +88,22 @@ if N_HIDDEN_LAYERS == 0
     nm_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
 end
 
+# get optimal decision
+opt_cost_train = []
+for t=1:TRAIN_SIZE
+    push!(
+        opt_cost_train,
+        ADL.compute_single_step_cost(model, Y_train[t, :], Y_train[t, :])
+    )
+end
+opt_cost_test = []
+for t=1:TEST_SIZE
+    push!(
+        opt_cost_test,
+        ADL.compute_single_step_cost(model, Y_test[t, :], Y_test[t, :])
+    )
+end
+
 dataframe = DataFrame(
     model=String[],
     train_cost=Float64[],
@@ -118,9 +134,27 @@ if N_HIDDEN_LAYERS == 0
         mean(sum((nm_pred_test' .- Y_test') .^2, dims=1)),
     ))
 end
+
+push!(dataframe, (
+    "OPTIMAL",
+    mean(opt_cost_train),
+    mean(opt_cost_test),
+    0.0, 
+    0.0
+))
 println(dataframe)
 CSV.write(joinpath(result_path, "costs.csv"), dataframe)
 
+# regret analysis
+regret_df = DataFrame(:model => ["LS", "GD", "NM"], :regret => [
+    mean(ls_cost_test) - mean(opt_cost_test),
+    mean(gd_cost_test) - mean(opt_cost_test),
+    mean(nm_cost_test) - mean(opt_cost_test)
+])
+println("Regret analysis")
+println(regret_df)
+CSV.write(joinpath(result_path, "regret.csv"), regret_df)
+ 
 # plot series predictions
 N = pd.n_demand
 Y = vcat(Y_train, Y_test)
