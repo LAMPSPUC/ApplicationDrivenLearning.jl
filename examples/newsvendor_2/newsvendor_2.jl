@@ -13,14 +13,14 @@ using ApplicationDrivenLearning
 Random.seed!(0)
 
 # entry parameters
-T = 60  # timesteps
-p = 3  # AR-p
+T = 1000  # timesteps
+p = 4  # AR-p
 I = 2  # newsvendors
-μ = 100  # demand mean
-σ = 10  # demand variance
-c = [5, 5]  # nesvendor cost
-q = [9, 6]  # newsvendor price
-r = [4, 1]  # newsvendor salvage value
+μ = 10  # demand mean
+σ = 3  # demand variance
+c = [10, 10]  # nesvendor cost
+q = [19, 11]  # newsvendor price
+r = [9, 1]  # newsvendor salvage value
 
 IMGS_PATH = joinpath(@__DIR__, "imgs")
 if !isdir(IMGS_PATH)
@@ -105,6 +105,8 @@ bl_sol = ApplicationDrivenLearning.train!(
 yhat_opt = model.forecast(X')'
 cost_opt = ApplicationDrivenLearning.compute_cost(model, X, Y)
 
+println("Cost LS: $cost_ls | Cost OPT: $cost_opt")
+
 # uncertainty analysis
 bias1 = abs.(yhat_opt[:, 1] .- yhat_ls[:, 1])
 bias2 = abs.(yhat_opt[:, 2] .- yhat_ls[:, 2])
@@ -114,25 +116,26 @@ corr1 = Statistics.cor(uncertainty[:, 1], bias1)
 corr2 = Statistics.cor(uncertainty[:, 2], bias2)
 
 # compare predictions
-fig1 = plot(Y[:, 1], label="True", color=:grey, title="Newsvendor 1 Demand", xlabel="Timesteps")
-plot!(yhat_ls[:, 1], label="LS")
-plot!(yhat_opt[:, 1], label="Opt")
+MAX_TIMESTEPS_PLOT = 100
+fig1 = plot(Y[1:MAX_TIMESTEPS_PLOT, 1], label="True", color=:black, title="Newsvendor 1 Demand", xlabel="Timesteps")
+plot!(yhat_ls[1:MAX_TIMESTEPS_PLOT, 1], label="LS", color=:grey)
+plot!(yhat_opt[1:MAX_TIMESTEPS_PLOT, 1], label="Opt")
 savefig(fig1, joinpath(IMGS_PATH, "newsvendor_1_demand.png"))
 
-fig2 = plot(Y[:, 2], label="True", color=:grey, title="Newsvendor 2 Demand", xlabel="Timesteps")
-plot!(yhat_ls[:, 2], label="LS")
-plot!(yhat_opt[:, 2], label="Opt")
+fig2 = plot(Y[1:MAX_TIMESTEPS_PLOT, 2], label="True", color=:black, title="Newsvendor 2 Demand", xlabel="Timesteps")
+plot!(yhat_ls[1:MAX_TIMESTEPS_PLOT, 2], label="LS", color=:grey)
+plot!(yhat_opt[1:MAX_TIMESTEPS_PLOT, 2], label="Opt")
 savefig(fig2, joinpath(IMGS_PATH, "newsvendor_2_demand.png"))
 
 # compare errors
 err_ls = (yhat_ls .- Y)
 err_opt = (yhat_opt .- Y)
-bins = -30:3:30
+bins = -10:1:10
 fig3 = histogram(
     err_ls[:, 1], 
     alpha=.7,
     bins=bins,
-    label="LS", 
+    label="LS", color=:grey,
     title="Newsvendor 1 Error", 
     xlabel="Timesteps"
 )
@@ -148,7 +151,7 @@ fig4 = histogram(
     err_ls[:, 2], 
     alpha=.7,
     bins=bins,
-    label="LS", 
+    label="LS", color=:grey, 
     title="Newsvendor 2 Error", 
     xlabel="Timesteps"
 )
@@ -164,6 +167,7 @@ savefig(fig4, joinpath(IMGS_PATH, "newsvendor_2_errors.png"))
 fig4 = scatter(
     bias1,
     uncertainty[:, 1],
+    alpha=.7,
     title="Relationship between uncertainty and bias",
     label="Newsvendor 1 (corr=$(round(100*corr1, digits=1))%)",
     xlabel="Bias",
@@ -172,6 +176,7 @@ fig4 = scatter(
 scatter!(
     bias2,
     uncertainty[:, 2],
+    alpha=.7,
     label="Newsvendor 2 (corr=$(round(100*corr2, digits=1))%)"
 )
 savefig(joinpath(IMGS_PATH, "uncertainty_bias.png"))
