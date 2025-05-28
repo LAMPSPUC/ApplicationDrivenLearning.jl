@@ -1,7 +1,7 @@
 name = "ApplicationDrivenLearning"
 uuid = "0856f1c8-ef17-4e14-9230-2773e47a789e"
 authors = ["Giovanni Amorim", "Joaquim Garcia"]
-version = "0.1.4"
+version = "0.1.5"
 
 [deps]
 BilevelJuMP = "485130c0-026e-11ea-0f1a-6992cd14145c"
