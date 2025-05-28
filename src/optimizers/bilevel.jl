@@ -119,12 +119,12 @@ function solve_bilevel(
     # implement predictive model expression iterating through 
     # models and layers to create predictive expression
     npreds = size(model.forecast.networks, 1)
-    predictive_model_vars = [Dict{Int,Any}() for ipred=1:npreds]
+    predictive_model_vars = [Dict{Int,Any}() for ipred = 1:npreds]
     y_hat = Matrix{Any}(undef, size(Y, 1), size(Y, 2))
-    for ipred=1:npreds
+    for ipred = 1:npreds
         layers_inpt = Dict{Any,Any}(
-            output_idx => X[1:T, input_idx] for
-            (input_idx, output_idx) in model.forecast.input_output_map[ipred]
+            output_idx => X[1:T, input_idx] for (input_idx, output_idx) in
+            model.forecast.input_output_map[ipred]
         )
         i_layer = 1
         for layer in model.forecast.networks[ipred]
@@ -177,7 +177,7 @@ function solve_bilevel(
     optimize!(bilevel_model)
 
     # fix parameters to predictive_model
-    for ipred=1:npreds
+    for ipred = 1:npreds
         ilayer = 1
         for layer in model.forecast.networks[ipred]
             if has_params(layer)
