@@ -136,7 +136,9 @@ function JuMP.set_optimizer(model::Model, builder, evaluate_duals::Bool = true)
     JuMP.set_optimizer(model.plan, () -> new_diff_optimizer)
 
     # basic setting for assess model
-    return JuMP.set_optimizer(model.assess, builder)
+    JuMP.set_optimizer(model.assess, builder)
+
+    return nothing
 end
 
 function JuMP.set_silent(model::Model)
