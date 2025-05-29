@@ -152,6 +152,9 @@ reg = pretrain_model(x_train, c_train)
 optmodel = get_optmodel(c_train);
 ApplicationDrivenLearning.set_forecast_model(optmodel, reg);
 
+ls_cost_train = ApplicationDrivenLearning.compute_cost(optmodel, x_train, c_train, false, false)
+ls_cost_test = ApplicationDrivenLearning.compute_cost(optmodel, x_test, c_test, false, false)
+
 # train with nelder mead
 nm_sol = ApplicationDrivenLearning.train!(
     optmodel, x_train, c_train,
@@ -161,8 +164,7 @@ nm_sol = ApplicationDrivenLearning.train!(
         iterations=1_000, 
         show_trace=true, 
         show_every=5,
-        g_tol=1e-2,
-        time_limit=60,
+        time_limit=10*60,
     )
 )
 
@@ -175,7 +177,11 @@ for i=1:size(x_test, 1)
     y = c_test[i, :]
     opt_costs[i] = ApplicationDrivenLearning.compute_single_step_cost(optmodel, y, y)
 end
-test_cost_df = DataFrame(:test_cost => costs, :opt_cost => opt_costs)
+test_cost_df = DataFrame(
+    :test_cost => costs, 
+    :opt_cost => opt_costs,
+    :ls_cost => ls_cost_test
+)
 
 # save results
 CSV.write(joinpath(OUTP_PATH, "costs.csv"), test_cost_df)
