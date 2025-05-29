@@ -10,7 +10,7 @@ using Plots
 using JuMP
 using ApplicationDrivenLearning
 
-Random.seed!(0)
+Random.seed!(123)
 
 # entry parameters
 T = 1000  # timesteps
@@ -27,25 +27,46 @@ if !isdir(IMGS_PATH)
     mkdir(IMGS_PATH)
 end
 
-# generate data X,Y
-Y = Matrix{Float32}(undef, T+p, I)
-Y[1:p, :] .= rand(Distributions.Normal(μ, σ), (p, I))
-α = rand(Distributions.Uniform(0.1, 1.0), (p, I))
-α = α ./ sum(α, dims=1)  # Normalize to sum to 1
-for t in (p+1):T+p
-    for i=1:I
-        Y[t, i] = (α[:, i]'Y[t-p:t-1, i])' .+ rand(Distributions.Normal(0.0, σ))
+function generate_ar_p(T::Int, p::Int, μ::Float64=10.0, σ::Float64=3.0)
+    α = rand(Distributions.Uniform(0.1, 1.0), p)
+    α = 1.0 * α ./ sum(α)  # Normalize to sum to 1
+    demand = Vector{Float32}(undef, T)
+
+    # Initialize first p values with Gaussian noise
+    for t in 1:p
+        demand[t] = rand(Distributions.Normal(μ, σ))
     end
+
+    # Generate demand series using AR(p) recursion
+    for t in (p+1):T
+        demand[t] = (
+            sum(α[i] * demand[t-i]^2 for i in 1:p)^0.5 + 
+            rand(Distributions.Normal(0.0, σ))
+        )
+    end
+
+    return demand
 end
-X = Matrix{Float32}(undef, T, I*p)
-for t=1:T
-    for ip=1:p
-        for i=1:I
-            X[t, p*(i-1) + ip] = Y[t+ip-1, i]
+
+function generate_series_data(I::Int, T::Int, r::Int, p::Int)
+    Y = Matrix{Float32}(undef, T+p, I)
+    for i=1:I
+        Y[:, i] = max.(0.1, generate_ar_p(T+p, r))
+    end
+    X = Matrix{Float32}(undef, T, I*p)
+    for t=1:T
+        for ip=1:p
+            for i=1:I
+                X[t, p*(i-1) + ip] = Y[t+ip-1, i]
+            end
         end
     end
+    Y = Y[p+1:end, :]
+    return X, Y
 end
-Y = Y[p+1:end, :]
+
+# generate data X,Y
+X, Y = generate_series_data(I, T , p, p)
 
 # compute least-squares models (one for each item)
 θ = zeros((p+1, I))
@@ -188,7 +209,7 @@ histogram!(
 )
 savefig(fig4, joinpath(IMGS_PATH, "newsvendor_2_errors.png"))
 
-# scatter plot
+# scatter plot uncertainty vs bias
 fig5 = plot(
     title="Relationship between uncertainty and bias",
     xlabel="Bias",
