@@ -57,7 +57,7 @@ function get_solution(optmodel, X, C)
     preds = zeros(size(C))
     solutions = zeros(size(C))
     for i=1:size(X, 1)
-        c = -ApplicationDrivenLearning.compute_cost(optmodel, X[[i], :], C[[i], :])
+        c = ApplicationDrivenLearning.compute_cost(optmodel, X[[i], :], C[[i], :])
         pred = optmodel.forecast(X[[i], :]')
         sol = value.(ApplicationDrivenLearning.assess_policy_vars(optmodel))
         costs[i] = c
@@ -98,6 +98,9 @@ reg = pretrain_model(x_train, c_train)
 optmodel = get_optmodel(W, caps);
 ApplicationDrivenLearning.set_forecast_model(optmodel, reg);
 
+ls_cost_train = ApplicationDrivenLearning.compute_cost(optmodel, x_train, c_train, false, false)
+ls_cost_test = ApplicationDrivenLearning.compute_cost(optmodel, x_test, c_test, false, false)
+
 # train with nelder mead
 nm_sol = ApplicationDrivenLearning.train!(
     optmodel, x_train, c_train,
@@ -106,21 +109,24 @@ nm_sol = ApplicationDrivenLearning.train!(
         iterations=1_000,
         show_trace=true,
         show_every=5,
-        time_limit=60,
-        g_tol=1e-2
+        time_limit=60
     )
 )
 
 # get test costs
 test_costs, test_predictions, test_solutions = get_solution(optmodel, x_test, c_test)
 
-# get optimzal costs
+# get optimal costs
 opt_costs = zeros(size(c_test, 1))
 for i=1:size(x_test, 1)
     y = c_test[i, :]
-    opt_costs[i] = -ApplicationDrivenLearning.compute_single_step_cost(optmodel, y, y)
+    opt_costs[i] = ApplicationDrivenLearning.compute_single_step_cost(optmodel, y, y)
 end
-test_cost_df = DataFrame(:test_cost => test_costs, :opt_cost => opt_costs)
+test_cost_df = DataFrame(
+    :test_cost => test_costs, 
+    :opt_cost => opt_costs,
+    :ls_cost => ls_cost_test
+)
 
 # save results
 CSV.write(joinpath(OUTP_PATH, "costs.csv"), test_cost_df)
