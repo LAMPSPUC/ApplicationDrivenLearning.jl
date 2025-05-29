@@ -1,0 +1,2 @@
+run,I,n_layers,n_params,time_ls,yerr_ls_train,cost_ls_train,yerr_ls_test,cost_ls_test,time_bl,yerr_bl_train,cost_bl_train,yerr_bl_test,cost_bl_test,time_nm,yerr_nm_train,cost_nm_train,yerr_nm_test,cost_nm_test,time_gd,yerr_gd_train,cost_gd_train,yerr_gd_test,cost_gd_test
+1,1000,0,5000,5.347771883010864,8.799461,-109108.12730326061,10.0392065,-69025.702251468,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,NaN,302.6837739944458,14.150753,-112958.04319131792,16.122423,-69906.98320425228

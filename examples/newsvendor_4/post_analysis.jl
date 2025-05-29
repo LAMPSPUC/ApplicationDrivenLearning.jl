@@ -2,6 +2,7 @@ import Random
 using CSV
 using Plots
 using Query
+using Glob
 using StatsPlots
 using DataFrames
 using Statistics
@@ -12,16 +13,15 @@ if !isdir(IMGS_PATH)
     mkdir(IMGS_PATH)
 end
 
-function replace_I_with_count(df)
-    ci = 1
-    for i in unique(plt_df.I)
-        replace!(plt_df.I, i => ci)
-        ci+=1
-    end
+# load dataframe from csv files
+result_files = filter(file -> occursin("run_", file), readdir(IMGS_PATH))
+dfs = []
+for f in result_files
+    fdf = CSV.read(joinpath(IMGS_PATH, f), DataFrame)
+    fdf._id .= rand(1:100000000)
+    push!(dfs, fdf)
 end
-
-# load dataframe from csv
-df = CSV.read(joinpath(IMGS_PATH, "newsvendor_4.csv"), DataFrame)
+df = vcat(dfs...)
 
 # train cost vs. number of hidden layers
 df.improve_bl_train = 100 * (df.cost_bl_train .- df.cost_ls_train) ./ df.cost_ls_train
@@ -34,7 +34,7 @@ df.improve_gd_test = 100 * (df.cost_gd_test .- df.cost_ls_test) ./ df.cost_ls_te
 # plot train improvement from LS by model and problem scale
 plt_df = stack(
     df[:, [
-        :I, 
+        :I, :n_layers,
         :improve_bl_train, :improve_nm_train, :improve_gd_train
     ]], 
     [
@@ -44,24 +44,28 @@ plt_df = stack(
 )
 plt_df = filter(:value => !isnan, plt_df)
 sort!(plt_df, [:I])
-replace_I_with_count(plt_df)
+transform!(plt_df, :I => ByRow(string) => :I)
+plt_df.model_name = [Dict(
+    "improve_bl_train" => "Bilevel",
+    "improve_nm_train" => "Nelder-Mead",
+    "improve_gd_train" => "Gradient",
+)[x] for x in plt_df.model]
 
-@df plt_df groupedbar(
-    :I, :value, group=:model, 
+@df plt_df groupedboxplot(
+    :I, :value, group=:model_name, 
     bar_position=:dodge,
     title="Improvement on train data",
-    xlabel="Problem scale (I)",
+    xlabel="Problem scale (# items)",
     ylabel="Improvement (%)",
-    legend=:topleft,
-    label=["Bilevel" "Gradient Descent" "Nelder-Mead"],
-    ylims=(0, maximum(plt_df.value) * 1.3),
+    legend=:topright,
+    # ylims=(0, maximum(plt_df.value) * 1.3),
 )
 savefig(joinpath(IMGS_PATH, "train_improvement.png"))
 
 # plot test improvement from LS by model and problem scale
 plt_df = stack(
     df[:, [
-        :I, 
+        :I, :n_layers,
         :improve_bl_test, :improve_nm_test, :improve_gd_test
     ]], 
     [
@@ -71,16 +75,20 @@ plt_df = stack(
 )
 plt_df = filter(:value => !isnan, plt_df)
 sort!(plt_df, [:I])
-replace_I_with_count(plt_df)
+transform!(plt_df, :I => ByRow(string) => :I)
+plt_df.model_name = [Dict(
+    "improve_bl_test" => "Bilevel",
+    "improve_nm_test" => "Nelder-Mead",
+    "improve_gd_test" => "Gradient",
+)[x] for x in plt_df.model]
 
-@df plt_df groupedbar(
-    :I, :value, group=:model, 
+@df plt_df groupedboxplot(
+    :I, :value, group=:model_name, 
     bar_position=:dodge,
     title="Improvement on test data",
-    xlabel="Problem scale (I)",
+    xlabel="Problem scale (# items)",
     ylabel="Improvement (%)",
-    legend=:topleft,
-    label=["Bilevel" "Gradient Descent" "Nelder-Mead"],
-    ylims=(0, maximum(plt_df.value) * 1.3),
+    legend=:topright,
+    # ylims=(0, maximum(plt_df.value) * 1.3),
 )
 savefig(joinpath(IMGS_PATH, "test_improvement.png"))

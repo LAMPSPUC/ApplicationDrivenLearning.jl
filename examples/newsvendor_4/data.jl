@@ -46,7 +46,7 @@ end
 function generate_series_data(I::Int, T::Int, r::Int, p::Int)
     Y = Matrix{Float32}(undef, T+p, I)
     for i=1:I
-        Y[:, i] = max.(0, generate_ar_p(T+p, r))
+        Y[:, i] = max.(0.1, generate_ar_p(T+p, r))
     end
     X = Matrix{Float32}(undef, T, I*p)
     for t=1:T

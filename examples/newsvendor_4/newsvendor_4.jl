@@ -21,212 +21,239 @@ if !isdir(IMGS_PATH)
 end
 
 rows = []
-for I in I_space
+for itry = 1:n_tries
+    for I in I_space
 
-    # generate_data
-    X_train, Y_train = generate_series_data(I, T_train, r, p)
-    X_test, Y_test = generate_series_data(I, T_test, r, p)
+        # generate_data
+        X_train, Y_train = generate_series_data(I, T_train, r, p)
+        X_test, Y_test = generate_series_data(I, T_test, r, p)
 
-    # normalize regressors
-    mu_X = mean(X_train, dims=1)
-    std_X = std(X_train, dims=1)
-    X_train = (X_train .- mu_X) ./ std_X
-    X_test = (X_test .- mu_X) ./ std_X
+        # normalize regressors
+        mu_X = mean(X_train, dims=1)
+        std_X = std(X_train, dims=1)
+        X_train = (X_train .- mu_X) ./ std_X
+        X_test = (X_test .- mu_X) ./ std_X
 
-    # init model
-    model = init_newsvendor_model(I, Gurobi.Optimizer);
-    ref_costs = nothing
+        # init model
+        model = init_newsvendor_model(I, Gurobi.Optimizer);
+        ref_costs = nothing
 
-    for n_hidden_layers in n_hidden_layers_space
-        # start model
-        println("\nStarting model with I = $I and n_hidden_layers = $n_hidden_layers")
-        ls_nns = get_nns(p, I, n_hidden_layers, hidden_layers_size)
-        layers_size = size.(Flux.params(ls_nns[1]))
-        n_params = sum(prod.(layers_size)) * I
-    
-        # train nn with least-squares
-        t0 = time()
+        for n_hidden_layers in n_hidden_layers_space
+            # start model
+            println("\nStarting run $itry for model with I = $I and n_hidden_layers = $n_hidden_layers")
+            ls_nns = get_nns(p, I, n_hidden_layers, hidden_layers_size)
+            layers_size = size.(Flux.params(ls_nns[1]))
+            n_params = sum(prod.(layers_size)) * I
         
-        # from jump formulation
-        if (n_hidden_layers == 0)
-            ls_θ, ref_costs = get_ls_solution(X_train, Y_train)
-            for i=1:I
-                ls_nns[i][1].weight .= ls_θ[i, 1:p]'
-                ls_nns[i][1].bias .= ls_θ[i, p+1]'
-            end
-        
-        # from flux training
-        else
-            for i=1:I
-                tries = 0
-                success = false
-                while (!success) && (tries < max_pretrain_tries)
-                    tries += 1
-                    i_err = train_single_nn(
-                        ls_nns[i], 
-                        X_train[:, (i-1)*p+1:i*p], 
-                        Y_train[:, i], 
-                        Flux.AdamW(), 
-                        max_iter_pretrain, 
-                        pretrain_time_limit / I
-                    )
-                    success = i_err < ref_costs[i]
-                    if (!success) && (tries < max_pretrain_tries)
-                        # println("Pre-training failed for network $i. Trying again...")
-                        ls_nns[i] = get_single_nn(p, n_hidden_layers, hidden_layers_size)
+            # train nn with least-squares
+            t0 = time()
+            
+            # from jump formulation
+            if (n_hidden_layers == 0)
+                ls_θ, ref_costs = get_ls_solution(X_train, Y_train)
+                for i=1:I
+                    ls_nns[i][1].weight .= ls_θ[i, 1:p]'
+                    ls_nns[i][1].bias .= ls_θ[i, p+1]'
+                end
+            
+            # from flux training
+            else
+                for i=1:I
+                    tries = 0
+                    success = false
+                    while (!success) && (tries < max_pretrain_tries)
+                        tries += 1
+                        i_err = train_single_nn(
+                            ls_nns[i], 
+                            X_train[:, (i-1)*p+1:i*p], 
+                            Y_train[:, i], 
+                            Flux.AdamW(), 
+                            max_iter_pretrain, 
+                            pretrain_time_limit / I
+                        )
+                        success = i_err < ref_costs[i]
+                        if (!success) && (tries < max_pretrain_tries)
+                            # println("Pre-training failed for network $i. Trying again...")
+                            ls_nns[i] = get_single_nn(p, n_hidden_layers, hidden_layers_size)
+                        end
+                        println("Pre-training for network $i completed with error $(round(i_err, digits=2)).")
                     end
-                    println("Pre-training for network $i completed with error $(round(i_err, digits=2)).")
                 end
             end
-        end
-        time_ls = time() - t0
-        
-        # set forecast model
-        input_output_maps = [
-            Dict(collect((i-1)*p+1:i*p) => [i])
-            for i=1:I
-        ]
-        forecaster = ApplicationDrivenLearning.PredictiveModel(
-            deepcopy(ls_nns), input_output_maps, p*I, I
-        )
-        ApplicationDrivenLearning.set_forecast_model(model, forecaster)
-
-        # ls prediction
-        yhat_ls_train = model.forecast(X_train')'
-        yerr_ls_train = sum((yhat_ls_train - Y_train).^2) / (I*T_train)
-        cost_ls_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
-        yhat_ls_test = model.forecast(X_test')'
-        yerr_ls_test = sum((yhat_ls_test - Y_test).^2) / (I*T_test)
-        cost_ls_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
-
-        # train with bilevel mode
-        if (n_hidden_layers == 0) && (I == 1)
-            # set forecast model without relu
-            nns_without_relu = [Flux.Chain(nn[1]) for nn in ls_nns]
-            ApplicationDrivenLearning.set_forecast_model(
-                model, 
-                ApplicationDrivenLearning.PredictiveModel(
-                    deepcopy(nns_without_relu), input_output_maps, p*I, I
-                )
+            time_ls = time() - t0
+            
+            # set forecast model
+            input_output_maps = [
+                Dict(collect((i-1)*p+1:i*p) => [i])
+                for i=1:I
+            ]
+            forecaster = ApplicationDrivenLearning.PredictiveModel(
+                deepcopy(ls_nns), input_output_maps, p*I, I
             )
-            t0 = time()
-            bl_sol = ApplicationDrivenLearning.train!(
-                model, X_train, Y_train,
-                ApplicationDrivenLearning.Options(
-                    ApplicationDrivenLearning.BilevelMode,
-                    optimizer=Gurobi.Optimizer,
-                    mode=BilevelJuMP.FortunyAmatMcCarlMode(primal_big_M=5000, dual_big_M=5000)
-                )
-            )
-            time_bl = time() - t0
-            yhat_bl_train = model.forecast(X_train')'
-            yerr_bl_train = sum((yhat_bl_train - Y_train).^2) / (I*T_train)
-            cost_bl_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
-            yhat_bl_test = model.forecast(X_test')'
-            yerr_bl_test = sum((yhat_bl_test - Y_test).^2) / (I*T_test)
-            cost_bl_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
-        else
-            time_bl = NaN
-            yerr_bl_train = NaN
-            cost_bl_train = NaN
-            time_bl_train = NaN
-            yerr_bl_test = NaN
-            cost_bl_test = NaN
-            time_bl_test = NaN
-        end
+            ApplicationDrivenLearning.set_forecast_model(model, forecaster)
 
-        # train with nelder mead
-        if n_params <= max_params_nelder_mead
+            # ls prediction
+            yhat_ls_train = model.forecast(X_train')'
+            yerr_ls_train = sum((yhat_ls_train - Y_train).^2) / (I*T_train)
+            cost_ls_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
+            yhat_ls_test = model.forecast(X_test')'
+            yerr_ls_test = sum((yhat_ls_test - Y_test).^2) / (I*T_test)
+            cost_ls_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
+
+            # train with bilevel mode
+            if (n_hidden_layers == 0) && (I < 300)
+                # set forecast model without relu
+                nns_without_activation = [
+                    Flux.Chain([l for l in nn if ApplicationDrivenLearning.has_params(l)]...)
+                    for nn in ls_nns
+                ]
+                ApplicationDrivenLearning.set_forecast_model(
+                    model, 
+                    ApplicationDrivenLearning.PredictiveModel(
+                        deepcopy(nns_without_activation), input_output_maps, p*I, I
+                    )
+                )
+                t0 = time()
+                bl_sol = ApplicationDrivenLearning.train!(
+                    model, X_train, Y_train,
+                    ApplicationDrivenLearning.Options(
+                        ApplicationDrivenLearning.BilevelMode,
+                        optimizer=Gurobi.Optimizer,
+                        mode=BilevelJuMP.FortunyAmatMcCarlMode(primal_big_M=5000, dual_big_M=5000)
+                    )
+                )
+                # add relu activation again
+                if !ApplicationDrivenLearning.has_params(ls_nns[1][end])
+                    nns_with_activation = [
+                        Flux.Chain(nn..., Flux.relu)
+                        for nn in model.forecast.networks
+                    ]
+                    ApplicationDrivenLearning.set_forecast_model(
+                        model, 
+                        ApplicationDrivenLearning.PredictiveModel(
+                            deepcopy(nns_with_activation), input_output_maps, p*I, I
+                        )
+                    )
+                end
+
+                time_bl = time() - t0
+                yhat_bl_train = model.forecast(X_train')'
+                yerr_bl_train = sum((yhat_bl_train - Y_train).^2) / (I*T_train)
+                cost_bl_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
+                yhat_bl_test = model.forecast(X_test')'
+                yerr_bl_test = sum((yhat_bl_test - Y_test).^2) / (I*T_test)
+                cost_bl_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
+            else
+                time_bl = NaN
+                yerr_bl_train = NaN
+                cost_bl_train = NaN
+                time_bl_train = NaN
+                yerr_bl_test = NaN
+                cost_bl_test = NaN
+                time_bl_test = NaN
+            end
+
+            # train with nelder mead
+            if (n_hidden_layers == 0) && (n_params <= max_params_nelder_mead)
+                ApplicationDrivenLearning.set_forecast_model(
+                    model, 
+                    ApplicationDrivenLearning.PredictiveModel(
+                        deepcopy(ls_nns), input_output_maps, p*I, I
+                    )
+                )
+                t0 = time()
+                nm_sol = ApplicationDrivenLearning.train!(
+                    model, X_train, Y_train,
+                    ApplicationDrivenLearning.Options(
+                        ApplicationDrivenLearning.NelderMeadMode,
+                        iterations=max_iter, 
+                        show_trace=true, 
+                        show_every=compute_every,
+                        time_limit=time_limit,
+                        g_tol=g_tol
+                    )
+                )
+                time_nm = time() - t0
+                yhat_nm_train = model.forecast(X_train')'
+                yerr_nm_train = sum((yhat_nm_train - Y_train).^2) / (I*T_train)
+                cost_nm_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
+                yhat_nm_test = model.forecast(X_test')'
+                yerr_nm_test = sum((yhat_nm_test - Y_test).^2) / (I*T_test)
+                cost_nm_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
+            else
+                time_nm = NaN
+                yerr_nm_train = NaN
+                cost_nm_train = NaN
+                time_nm_train = NaN
+                yerr_nm_test = NaN
+                cost_nm_test = NaN
+                time_nm_test = NaN
+            end
+
+            # train with gradient descent
             ApplicationDrivenLearning.set_forecast_model(
                 model, 
                 ApplicationDrivenLearning.PredictiveModel(
                     deepcopy(ls_nns), input_output_maps, p*I, I
                 )
             )
+            
+            # define learning rate
+            if n_hidden_layers == 0
+                lr = 1e-1
+            elseif n_hidden_layers == 1
+                lr = 1e-3
+            elseif n_hidden_layers >= 2
+                lr = 1e-4
+            end
+            
             t0 = time()
-            nm_sol = ApplicationDrivenLearning.train!(
+            gd_sol = ApplicationDrivenLearning.train!(
                 model, X_train, Y_train,
                 ApplicationDrivenLearning.Options(
-                    ApplicationDrivenLearning.NelderMeadMode,
-                    iterations=max_iter, 
-                    show_trace=true, 
-                    show_every=compute_every,
+                    ApplicationDrivenLearning.GradientMode,
+                    rule=Flux.Adam(lr),
+                    batch_size=batch_size,
+                    compute_cost_every=compute_every,
+                    epochs=max_iter,
                     time_limit=time_limit,
                     g_tol=g_tol
                 )
             )
-            time_nm = time() - t0
-            yhat_nm_train = model.forecast(X_train')'
-            yerr_nm_train = sum((yhat_nm_train - Y_train).^2) / (I*T_train)
-            cost_nm_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
-            yhat_nm_test = model.forecast(X_test')'
-            yerr_nm_test = sum((yhat_nm_test - Y_test).^2) / (I*T_test)
-            cost_nm_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
-        else
-            time_nm = NaN
-            yerr_nm_train = NaN
-            cost_nm_train = NaN
-            time_nm_train = NaN
-            yerr_nm_test = NaN
-            cost_nm_test = NaN
-            time_nm_test = NaN
+            time_gd = time() - t0
+            yhat_gd_train = model.forecast(X_train')'
+            yerr_gd_train = sum((yhat_gd_train - Y_train).^2) / (I*T_train)
+            cost_gd_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
+            yhat_gd_test = model.forecast(X_test')'
+            yerr_gd_test = sum((yhat_gd_test - Y_test).^2) / (I*T_test)
+            cost_gd_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
+
+            push!(rows, (
+                itry, I,
+                n_hidden_layers, 
+                n_params, 
+                time_ls,yerr_ls_train,cost_ls_train,yerr_ls_test,cost_ls_test,
+                time_bl,yerr_bl_train,cost_bl_train,yerr_bl_test,cost_bl_test,
+                time_nm,yerr_nm_train,cost_nm_train,yerr_nm_test,cost_nm_test,
+                time_gd,yerr_gd_train,cost_gd_train,yerr_gd_test,cost_gd_test
+            ))
+
         end
-
-        # train with gradient descent
-        ApplicationDrivenLearning.set_forecast_model(
-            model, 
-            ApplicationDrivenLearning.PredictiveModel(
-                deepcopy(ls_nns), input_output_maps, p*I, I
-            )
-        )
-        if lr == "by_size"
-            lr = 10.0^(-n_hidden_layers-1)
-        end
-        t0 = time()
-        gd_sol = ApplicationDrivenLearning.train!(
-            model, X_train, Y_train,
-            ApplicationDrivenLearning.Options(
-                ApplicationDrivenLearning.GradientMode,
-                rule=Flux.Adam(lr),
-                batch_size=batch_size,
-                compute_cost_every=compute_every,
-                epochs=max_iter,
-                time_limit=time_limit,
-                g_tol=g_tol
-            )
-        )
-        time_gd = time() - t0
-        yhat_gd_train = model.forecast(X_train')'
-        yerr_gd_train = sum((yhat_gd_train - Y_train).^2) / (I*T_train)
-        cost_gd_train = ApplicationDrivenLearning.compute_cost(model, X_train, Y_train)
-        yhat_gd_test = model.forecast(X_test')'
-        yerr_gd_test = sum((yhat_gd_test - Y_test).^2) / (I*T_test)
-        cost_gd_test = ApplicationDrivenLearning.compute_cost(model, X_test, Y_test)
-
-        push!(rows, (
-            I,
-            n_hidden_layers, 
-            n_params, 
-            time_ls,yerr_ls_train,cost_ls_train,yerr_ls_test,cost_ls_test,
-            time_bl,yerr_bl_train,cost_bl_train,yerr_bl_test,cost_bl_test,
-            time_nm,yerr_nm_train,cost_nm_train,yerr_nm_test,cost_nm_test,
-            time_gd,yerr_gd_train,cost_gd_train,yerr_gd_test,cost_gd_test
-        ))
-
     end
+
+
+    df = DataFrame(
+        rows, 
+        [
+            :run, :I, :n_layers, :n_params,
+            :time_ls, :yerr_ls_train, :cost_ls_train, :yerr_ls_test, :cost_ls_test,
+            :time_bl, :yerr_bl_train, :cost_bl_train, :yerr_bl_test, :cost_bl_test,
+            :time_nm, :yerr_nm_train, :cost_nm_train, :yerr_nm_test, :cost_nm_test,
+            :time_gd, :yerr_gd_train, :cost_gd_train, :yerr_gd_test, :cost_gd_test
+        ]
+    )
+
+    # save as csv
+    CSV.write(joinpath(IMGS_PATH, "run_$(Int(round(time()))).csv"), df)
+
 end
-
-
-df = DataFrame(
-    rows, 
-    [
-        :I, :n_layers, :n_params,
-        :time_ls, :yerr_ls_train, :cost_ls_train, :yerr_ls_test, :cost_ls_test,
-        :time_bl, :yerr_bl_train, :cost_bl_train, :yerr_bl_test, :cost_bl_test,
-        :time_nm, :yerr_nm_train, :cost_nm_train, :yerr_nm_test, :cost_nm_test,
-        :time_gd, :yerr_gd_train, :cost_gd_train, :yerr_gd_test, :cost_gd_test
-    ]
-)
-
-# save as csv
-CSV.write(joinpath(IMGS_PATH, "newsvendor_4.csv"), df)
