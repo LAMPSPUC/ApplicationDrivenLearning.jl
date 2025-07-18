@@ -42,26 +42,27 @@ sol = ApplicationDrivenLearning.train!(
     X_train,
     Y_train,
     ApplicationDrivenLearning.Options(
-        ApplicationDrivenLearning.NelderMeadMode;
-        iterations=N_EPOCHS, 
-        show_trace=true,
-        show_every=30,
-        time_limit=TIME_LIMIT
+        ApplicationDrivenLearning.GradientMode;
+        rule=Flux.Adam(LEARNING_RATE), 
+        epochs=N_EPOCHS,
+        compute_cost_every=COMPUTE_EVERY,
+        batch_size=BATCH_SIZE,
+        time_limit=TIME_LIMIT,
     )
 )
 
-println("NelderMeadMode training time: $(time() - time1)")
+println("GradientMode training time: $(time() - time1)")
 
-nm_pred = model.forecast(X_train')'
-nm_mse = sum((nm_pred' .- Y_train') .^2, dims=1) |> mean
-nm_cost = ADL.compute_cost(model, X_train, Y_train)
+gd_pred = model.forecast(X_train')'
+gd_mse = sum((gd_pred' .- Y_train') .^2, dims=1) |> mean
+gd_cost = ADL.compute_cost(model, X_train, Y_train)
 
-println("OPT-NM MSE (train): $nm_mse")
-println("OPT-NM (train): $nm_cost")
+println("OPT-GD MSE (train): $gd_mse")
+println("OPT-GD (train): $gd_cost")
 
-nm_pred = model.forecast(X_test')'
-nm_mse = sum((nm_pred' .- Y_test') .^2, dims=1) |> mean
-nm_cost = ADL.compute_cost(model, X_test, Y_test)
+gd_pred = model.forecast(X_test')'
+gd_mse = sum((gd_pred' .- Y_test') .^2, dims=1) |> mean
+gd_cost = ADL.compute_cost(model, X_test, Y_test)
 
-println("OPT-NM MSE (test): $nm_mse")
-println("OPT-NM (test): $nm_cost")
+println("OPT-GD MSE (test): $gd_mse")
+println("OPT-GD (test): $gd_cost")

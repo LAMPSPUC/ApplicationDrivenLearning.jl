@@ -69,7 +69,8 @@ gd_pred_test = model.forecast(X_test')'
 gd_cost_test = ADL.compute_cost(model, X_test, Y_test, false, false)
 
 # get NM model
-if N_HIDDEN_LAYERS == 0
+nm_condition = (N_HIDDEN_LAYERS == 0) && (N_DEMANDS <= 100)
+if nm_condition
     models_state = JLD2.load(neldermead_model_state, "state")
     Flux.loadmodel!(nns, models_state);
     pred_model = ADL.PredictiveModel(
@@ -125,7 +126,7 @@ push!(dataframe, (
     mean(sum((gd_pred_train' .- Y_train') .^2, dims=1)),
     mean(sum((gd_pred_test' .- Y_test') .^2, dims=1)),
 ))
-if N_HIDDEN_LAYERS == 0
+if nm_condition
     push!(dataframe, (
         "NM",
         mean(nm_cost_train),
@@ -163,7 +164,7 @@ gd_pred = vcat(gd_pred_train, gd_pred_test)
 fig = plot(Y[:, 1:N], layout=N, alpha=.7, xticks=false, label="Demand")
 plot!(ls_pred[:, 1:N], layout=N, alpha=.7, xticks=false, label="LS")
 plot!(gd_pred[:, 1:N], layout=N, alpha=.7, xticks=false, label="GD")
-if N_HIDDEN_LAYERS == 0
+if nm_condition
     nm_pred = vcat(nm_pred_train, nm_pred_test)
     plot!(nm_pred[:, 1:N], layout=N, alpha=.7, xticks=false,  label="NM")
 end
@@ -181,7 +182,7 @@ savefig(fig, joinpath(imgs_path, "predictions.png"))
 # plot error histogram
 fig = histogram(mean((ls_pred_test - Y_test)[:, 1:pd.n_demand], dims=2), label="LS", alpha=.7)
 histogram!(mean((gd_pred_test - Y_test)[:, 1:pd.n_demand], dims=2), label="GD", alpha=.7)
-if N_HIDDEN_LAYERS == 0
+if nm_condition
     histogram!(mean((nm_pred_test - Y_test)[:, 1:pd.n_demand], dims=2), label="NM", alpha=.7)
 end
 plot!(xlabel="Error", ylabel="Frequency", title="Test Error Histogram")
@@ -192,7 +193,7 @@ savefig(fig, joinpath(imgs_path, "error_histogram.png"))
 # plot costs
 fig2 = plot(vcat(ls_cost_train, ls_cost_test), label="LS", alpha=.7)
 plot!(vcat(gd_cost_train, gd_cost_test), label="GD", alpha=.7)
-if N_HIDDEN_LAYERS == 0
+if nm_condition
     plot!(vcat(nm_cost_train, nm_cost_test), label="NM", alpha=.7)
 end
 plot!([TRAIN_SIZE, TRAIN_SIZE], [0, maximum(ls_cost_test)], color=:red, label="")

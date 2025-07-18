@@ -1,6 +1,6 @@
 # this config file is used to set the parameters for the experiment
 
-run_mode = 3  # 1: pretrain, 2: gradient, 3: neldermead
+run_mode = 1  # 1: pretrain, 2: gradient, 3: neldermead
 
 pretrain = false
 gradient_mode = false
@@ -19,9 +19,9 @@ else
     error("Invalid option")
 end
 
-CASE_NAME = "pglib_opf_case300_ieee"
+CASE_NAME = "pglib_opf_case588_sdet"
 N_LAGS = 1
-N_DEMANDS = 20
+N_DEMANDS = Int(round(parse(Int, CASE_NAME[findall(r"\d+", CASE_NAME)[1]]) / 2))
 N_ZONES = 10
 COEF_VARIATION = 0.4
 DEFF_COEF = 8.0
@@ -31,7 +31,7 @@ TEST_SIZE = 1200
 SIM_SLICES = 3 * 64
 TRASMISSION_REDUCTION = 1
 
-model_type = 1  # 1: univariate, 2: multivariate, 3: many-univariate
+model_type = 3  # 1: univariate, 2: multivariate, 3: many-univariate
 N_HIDDEN_LAYERS = 0
 HIDDEN_SIZE = 64
 
@@ -71,3 +71,6 @@ if !(isdir(result_path))
     mkpath(result_path)
     mkpath(imgs_path)
 end
+
+# this next line comment has to exist because of julia file writing bug
+#########
