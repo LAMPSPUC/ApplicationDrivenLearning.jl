@@ -21,7 +21,7 @@ class LinearRegression(nn.Module):
         out = self.linear(x)
         return out
 
-def trainModel(reg, loss_func, method_name, num_epochs=40, lr=1e-2):
+def trainModel(reg, loss_func, method_name, num_epochs=25, lr=1e-2):
     # set adam optimizer
     optimizer = torch.optim.Adam(reg.parameters(), lr=lr)
     # train mode
@@ -107,7 +107,7 @@ if __name__ == '__main__':
     costs = np.array(costs)
 
     predicted_costs_df = pd.DataFrame(predicted_costs, columns=[f'asset_{i}' for i in range(1, m+1)])
-    solutions_df = pd.DataFrame(solutions.astype(int), columns=[f'asset_{i}' for i in range(1, m+1)])
+    solutions_df = pd.DataFrame(solutions, columns=[f'asset_{i}' for i in range(1, m+1)])
     costs_df = pd.DataFrame(costs, columns=["cost"])
 
     # store results in csv files

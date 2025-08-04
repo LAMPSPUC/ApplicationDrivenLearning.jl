@@ -14,10 +14,10 @@ RES2_PATH = joinpath(DATA_PATH, "adl_result")
 costs_1 = CSV.read(joinpath(RES1_PATH, "costs.csv"), DataFrame)
 costs_2 = CSV.read(joinpath(RES2_PATH, "costs.csv"), DataFrame)
 
-costs_2.pyepo_cost = costs_1.cost
+costs_2.pyepo_cost = -costs_1.cost
 
-costs_2.adl_regret = (costs_2.test_cost - costs_2.opt_cost) ./ costs_2.opt_cost
-costs_2.pyepo_regret = (costs_2.pyepo_cost - costs_2.opt_cost) ./ costs_2.opt_cost
+costs_2.adl_regret = (costs_2.test_cost - costs_2.opt_cost) ./ abs.(costs_2.opt_cost)
+costs_2.pyepo_regret = (costs_2.pyepo_cost - costs_2.opt_cost) ./ abs.(costs_2.opt_cost)
 costs_2.adl_improv = (costs_2.ls_cost - costs_2.test_cost) ./ abs.(costs_2.ls_cost)
 costs_2.pyepo_improv = (costs_2.ls_cost - costs_2.pyepo_cost) ./ abs.(costs_2.ls_cost)
 

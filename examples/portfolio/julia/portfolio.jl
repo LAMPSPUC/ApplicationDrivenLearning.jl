@@ -3,6 +3,7 @@ import Flux
 import Optim
 import Gurobi
 import Random
+using Statistics
 using JuMP
 using DataFrames
 using ApplicationDrivenLearning
@@ -17,12 +18,14 @@ OUTP_PATH = joinpath(DATA_PATH, "adl_result")
 
 # parameters
 train_size = 100
-grid = (5, 5)
 
 function get_data()
     # load data
+    cov_df = CSV.read(joinpath(INPT_PATH, "cov.csv"), DataFrame)
     c_df = CSV.read(joinpath(INPT_PATH, "c.csv"), DataFrame)
     x_df = CSV.read(joinpath(INPT_PATH, "x.csv"), DataFrame)
+
+    cov = Matrix(cov_df) .|> Float32
 
     # split train and test
     x_train = Matrix(x_df)[1:train_size, :] .|> Float32
@@ -30,10 +33,10 @@ function get_data()
     c_train = Matrix(c_df)[1:train_size, :] .|> Float32
     c_test  = Matrix(c_df)[train_size+1:end, :] .|> Float32
 
-    return (x_train, x_test, c_train, c_test)
+    return (cov, x_train, x_test, c_train, c_test)
 end
 
-function pretrain_model(X, C, epochs=100, lr=1e-2, batchsize=32, verbose=true)
+function pretrain_model(X, C, epochs=1000, lr=1e-3, batchsize=32, verbose=true)
     # linear model
     reg = Flux.Dense(size(X, 2) => size(C, 2))
     train_data = Flux.DataLoader((X', C'), batchsize=batchsize)
@@ -64,28 +67,9 @@ function get_solution(optmodel, X, C)
     return costs, preds, solutions
 end
 
-function get_optmodel(c_train)
-    m = size(c_train, 2)
-
-    # construct arcs (edges)
-    arcs = Matrix{Float64}(undef, m, 2)
-    im = 1
-    for i=1:grid[1]
-        # edges on rows
-        for j=1:grid[2]-1
-            v = (i-1) * grid[2] + j
-            arcs[im, :] = [v, v+1]
-            im += 1
-        end
-        # edges in columns
-        if i != grid[1]
-            for j=1:grid[2]
-                v = (i-1) * grid[2] + j
-                arcs[im, :] = [v, v+grid[2]]
-                im += 1
-            end
-        end  
-    end
+function get_optmodel(cov, gamma=2.25)
+    m = size(cov, 1)
+    risk_level = gamma * mean(cov)
 
     # init optimization model
     optmodel = ApplicationDrivenLearning.Model()
@@ -93,49 +77,25 @@ function get_optmodel(c_train)
         c[1:m], ApplicationDrivenLearning.Forecast
         x[1:m], ApplicationDrivenLearning.Policy
     end)
+
+    # plan
     x_plan_set = [ix.plan for ix in x]
     c_plan_set = [ic.plan for ic in c]
+    @constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set .>= 0)
+    @constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set .<= 1)
+    @constraint(ApplicationDrivenLearning.Plan(optmodel), sum(x_plan_set) == 1)
+    @constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set'cov*x_plan_set <= risk_level)
+    @objective(ApplicationDrivenLearning.Plan(optmodel), Min, -c_plan_set'x_plan_set)
+
+    # assess
     x_assess_set = [ix.assess for ix in x]
     c_assess_set = [ic.assess for ic in c]
-    @constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set .>= 0)
     @constraint(ApplicationDrivenLearning.Assess(optmodel), x_assess_set .>= 0)
-    @constraint(ApplicationDrivenLearning.Plan(optmodel), x_plan_set .<= 1)
     @constraint(ApplicationDrivenLearning.Assess(optmodel), x_assess_set .<= 1)
-    for i=1:grid[1]
-        for j=1:grid[2]
-            v = (i-1)*grid[2] + j
-            expr_plan = 0
-            expr_assess = 0
-            for im=1:m
-                e = arcs[im, :]
-                # flow in
-                if v == e[2]
-                    expr_plan += x_plan_set[im]
-                    expr_assess += x_assess_set[im]
-                end
-                # flow out
-                if v == e[1]
-                    expr_plan -= x_plan_set[im]
-                    expr_assess -= x_assess_set[im]
-                end
-            end
-            # source
-            if (i == 1) && (j == 1)
-                @constraint(ApplicationDrivenLearning.Plan(optmodel), expr_plan == -1)
-                @constraint(ApplicationDrivenLearning.Assess(optmodel), expr_assess == -1)
-            # sink
-            elseif (i == grid[1]) && (j == grid[2])
-                @constraint(ApplicationDrivenLearning.Plan(optmodel), expr_plan == 1)
-                @constraint(ApplicationDrivenLearning.Assess(optmodel), expr_assess == 1)
-            # transition
-            else
-                @constraint(ApplicationDrivenLearning.Plan(optmodel), expr_plan == 0)
-                @constraint(ApplicationDrivenLearning.Assess(optmodel), expr_assess == 0)
-            end
-        end
-    end
-    @objective(ApplicationDrivenLearning.Plan(optmodel), Min, c_plan_set'x_plan_set)
-    @objective(ApplicationDrivenLearning.Assess(optmodel), Min, c_assess_set'x_assess_set)
+    @constraint(ApplicationDrivenLearning.Assess(optmodel), sum(x_assess_set) == 1)
+    @constraint(ApplicationDrivenLearning.Assess(optmodel), x_assess_set'cov*x_assess_set <= risk_level)
+    @objective(ApplicationDrivenLearning.Assess(optmodel), Min, -c_assess_set'x_assess_set)
+
     set_optimizer(optmodel, Gurobi.Optimizer)
     set_silent(optmodel)
 
@@ -143,13 +103,13 @@ function get_optmodel(c_train)
 end
 
 # load data
-(x_train, x_test, c_train, c_test) = get_data()
+(cov, x_train, x_test, c_train, c_test) = get_data()
 
 # pretrain model
 reg = pretrain_model(x_train, c_train)
 
 # set forecast model
-optmodel = get_optmodel(c_train);
+optmodel = get_optmodel(cov);
 ApplicationDrivenLearning.set_forecast_model(optmodel, reg);
 
 ls_cost_train = ApplicationDrivenLearning.compute_cost(optmodel, x_train, c_train, false, false)
@@ -161,9 +121,9 @@ nm_sol = ApplicationDrivenLearning.train!(
     ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.NelderMeadMode,
         initial_simplex=Optim.AffineSimplexer(0.9, 0.1),
-        iterations=1_000, 
+        iterations=100,
         show_trace=true, 
-        show_every=5,
+        show_every=1,
         time_limit=10*60,
     )
 )
@@ -187,3 +147,14 @@ test_cost_df = DataFrame(
 CSV.write(joinpath(OUTP_PATH, "costs.csv"), test_cost_df)
 CSV.write(joinpath(OUTP_PATH, "predictions.csv"), DataFrame(preds, :auto))
 CSV.write(joinpath(OUTP_PATH, "solutions.csv"), DataFrame(solutions, :auto))
+
+# test pyepo results
+RES2_PATH = joinpath(DATA_PATH, "pyepo_result")
+preds_pyepo = Matrix(CSV.read(joinpath(RES2_PATH, "predictions.csv"), DataFrame))
+costs_pyepo = Matrix(CSV.read(joinpath(RES2_PATH, "costs.csv"), DataFrame))
+solutions_pyepo = Matrix(CSV.read(joinpath(RES2_PATH, "solutions.csv"), DataFrame))
+
+pyepo_costs = zeros(size(c_test, 1))
+for i=1:size(c_test, 1)
+    pyepo_costs[i] = ApplicationDrivenLearning.compute_single_step_cost(optmodel, c_test[i, :], preds_pyepo[i, :])
+end
