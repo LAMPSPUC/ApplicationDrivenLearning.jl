@@ -12,6 +12,7 @@ Documenter.makedocs(;
             "tutorials",
             ["getting_started.md", "modes.md", "custom_forecast.md"],
         ),
+        "Examples" => joinpath.("examples", ["scheduling.md", "newsvendor.md"]),
         "API Reference" => "reference.md",
     ],
 )
