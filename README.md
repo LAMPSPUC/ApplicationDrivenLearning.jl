@@ -7,7 +7,7 @@ This repository contains experiments using ApplicationDrivenLearning.jl.
 
 ```sh
 root/
-├─ examples/
+├─ experiments/
 │   ├─ newsvendor_1/
 │   │   ├─ imgs/ # plots from experiment
 │   │   └─ newsvendor_1.jl # main script
