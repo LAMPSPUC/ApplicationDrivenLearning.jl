@@ -1,5 +1,6 @@
 [deps]
 ApplicationDrivenLearning = "0856f1c8-ef17-4e14-9230-2773e47a789e"
 Glob = "c27321d9-0574-5035-807b-f59d2c89b15c"
+MathOptInterface = "b8f27783-ece8-5eb3-8dc8-9495eed66fee"
 Query = "1a8c2f83-1ff3-5112-b086-8aa67b057ba1"
 StatsPlots = "f3b207a7-027a-5e70-b257-86293d7955fd"

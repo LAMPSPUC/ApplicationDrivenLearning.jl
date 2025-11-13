@@ -1,14 +1,11 @@
 function init_newsvendor_model(I, Optimizer, allow_trade::Bool=false)
     # get problem data
     c, q, r = generate_problem_data(I)
-    println("c=$c")
-    println("q=$q")
-    println("r=$r")
     # mount ADL model
     model = ApplicationDrivenLearning.Model()
     @variables(model, begin
         x[1:I] ≥ 0, ApplicationDrivenLearning.Policy
-        d[1:I] ≥ 0, ApplicationDrivenLearning.Forecast
+        d[1:I], ApplicationDrivenLearning.Forecast
     end)
     function build_jump_model(jump_model, x, d)
         @variables(jump_model, begin
