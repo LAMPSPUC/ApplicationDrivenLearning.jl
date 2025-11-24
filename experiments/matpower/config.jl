@@ -30,6 +30,7 @@ TRAIN_SIZE = 1200
 TEST_SIZE = 1200
 SIM_SLICES = 3 * 64
 TRASMISSION_REDUCTION = 1
+N_PROCS = 13
 
 model_type = 3  # 1: univariate, 2: multivariate, 3: many-univariate
 N_HIDDEN_LAYERS = 0

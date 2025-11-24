@@ -52,7 +52,7 @@ for i=1:size(dotm_files, 1)
         seek(file, 0)
         write(file, new_content)
     end
-    JQM.mpiexec(exe -> run(`$exe -n 13 $(Base.julia_cmd()) --project main.jl`))
+    JQM.mpiexec(exe -> run(`$exe -n $(N_PROCS) $(Base.julia_cmd()) --project main.jl`))
 
     ## nelder-mead
     if (N_HIDDEN_LAYERS == 0) && (N_DEMANDS <= 100)
@@ -65,7 +65,7 @@ for i=1:size(dotm_files, 1)
             seek(file, 0)
             write(file, new_content)
         end
-        JQM.mpiexec(exe -> run(`$exe -n 13 $(Base.julia_cmd()) --project main.jl`))
+        JQM.mpiexec(exe -> run(`$exe -n $(N_PROCS) $(Base.julia_cmd()) --project main.jl`))
     end
 
     ## post analysis
