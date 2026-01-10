@@ -1,7 +1,7 @@
 name = "ApplicationDrivenLearning"
 uuid = "0856f1c8-ef17-4e14-9230-2773e47a789e"
-authors = ["Giovanni Amorim", "Joaquim Garcia"]
 version = "0.1.5"
+authors = ["Giovanni Amorim", "Joaquim Garcia"]
 
 [deps]
 BilevelJuMP = "485130c0-026e-11ea-0f1a-6992cd14145c"
@@ -23,7 +23,7 @@ Flux = "0.16.3"
 JobQueueMPI = "0.1.1"
 JuMP = "1.24"
 MPI = "0.20.22"
-Optim = "1.11"
+Optim = "1.11, 2"
 Optimisers = "0.4.5"
 ParametricOptInterface = "0.9.0, 0.10"
 Statistics = "1"
