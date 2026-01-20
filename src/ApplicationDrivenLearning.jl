@@ -38,6 +38,42 @@ end
 *(c::Number, p::Forecast) = Forecast(c * p.plan, c * p.assess)
 
 """
+    Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
+
+Allow accessing `.plan` and `.assess` on arrays of Policy variables.
+Returns an array of the corresponding field values.
+Preserves all other properties by falling back to getfield.
+"""
+function Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
+    if sym === :plan
+        return [x.plan for x in arr]
+    elseif sym === :assess
+        return [x.assess for x in arr]
+    else
+        # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
+        return getfield(arr, sym)
+    end
+end
+
+"""
+    Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
+
+Allow accessing `.plan` and `.assess` on arrays of Forecast variables.
+Returns an array of the corresponding field values.
+Preserves all other properties by falling back to getfield.
+"""
+function Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
+    if sym === :plan
+        return [x.plan for x in arr]
+    elseif sym === :assess
+        return [x.assess for x in arr]
+    else
+        # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
+        return getfield(arr, sym)
+    end
+end
+
+"""
     Model <: JuMP.AbstractModel
 
 Create an empty ApplicationDrivenLearning.Model with empty plan and assess
