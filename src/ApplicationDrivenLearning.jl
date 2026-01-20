@@ -21,6 +21,7 @@ end
 
 +(p1::Policy, p2::Policy) = Policy(p1.plan + p2.plan, p1.assess + p2.assess)
 *(c::Number, p::Policy) = Policy(c * p.plan, c * p.assess)
+*(p::Policy, c::Number) = Policy(c * p.plan, c * p.assess)
 
 """
     Forecast{T}
@@ -36,6 +37,7 @@ function +(p1::Forecast, p2::Forecast)
     return Forecast(p1.plan + p2.plan, p1.assess + p2.assess)
 end
 *(c::Number, p::Forecast) = Forecast(c * p.plan, c * p.assess)
+*(p::Forecast, c::Number) = Forecast(c * p.plan, c * p.assess)
 
 """
     Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
