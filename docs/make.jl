@@ -8,10 +8,11 @@ Documenter.makedocs(;
     authors = "Giovanni Amorim, Joaquim Garcia",
     pages = [
         "Home" => "index.md",
-        "Tutorials" => joinpath.(
-            "tutorials",
-            ["getting_started.md", "modes.md", "custom_forecast.md"],
-        ),
+        "Tutorials" =>
+            joinpath.(
+                "tutorials",
+                ["getting_started.md", "modes.md", "custom_forecast.md"],
+            ),
         "Examples" => joinpath.("examples", ["scheduling.md", "newsvendor.md"]),
         "API Reference" => "reference.md",
     ],

@@ -21,6 +21,7 @@ end
 
 +(p1::Policy, p2::Policy) = Policy(p1.plan + p2.plan, p1.assess + p2.assess)
 *(c::Number, p::Policy) = Policy(c * p.plan, c * p.assess)
+*(p::Policy, c::Number) = Policy(c * p.plan, c * p.assess)
 
 """
     Forecast{T}
@@ -36,6 +37,43 @@ function +(p1::Forecast, p2::Forecast)
     return Forecast(p1.plan + p2.plan, p1.assess + p2.assess)
 end
 *(c::Number, p::Forecast) = Forecast(c * p.plan, c * p.assess)
+*(p::Forecast, c::Number) = Forecast(c * p.plan, c * p.assess)
+
+"""
+    Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
+
+Allow accessing `.plan` and `.assess` on arrays of Policy variables.
+Returns an array of the corresponding field values.
+Preserves all other properties by falling back to getfield.
+"""
+function Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
+    if sym === :plan
+        return [x.plan for x in arr]
+    elseif sym === :assess
+        return [x.assess for x in arr]
+    else
+        # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
+        return getfield(arr, sym)
+    end
+end
+
+"""
+    Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
+
+Allow accessing `.plan` and `.assess` on arrays of Forecast variables.
+Returns an array of the corresponding field values.
+Preserves all other properties by falling back to getfield.
+"""
+function Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
+    if sym === :plan
+        return [x.plan for x in arr]
+    elseif sym === :assess
+        return [x.assess for x in arr]
+    else
+        # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
+        return getfield(arr, sym)
+    end
+end
 
 """
     Model <: JuMP.AbstractModel
