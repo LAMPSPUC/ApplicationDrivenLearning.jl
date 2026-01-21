@@ -1,10 +1,10 @@
 function compute_single_step_cost(
     model::Model,
     y::Vector{<:Real},
-    yhat::Vector{<:Real},
+    yhat::VariableIndexedVector,
 )
     # set forecast params as prediction output
-    MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat)
+    MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat[model.forecast_vars])
     # optimize plan model
     optimize!(model.plan)
     # check for solution and fix assess policy vars
@@ -100,7 +100,7 @@ function compute_cost(
     dCdz = Vector{Float32}(undef, size(model.policy_vars, 1))
     dCdy = Vector{Float32}(undef, model.forecast.output_size)
 
-    function _compute_step(y, yhat)
+    function _compute_step(y::Vector{<:Real}, yhat::VariableIndexedVector)
         c = compute_single_step_cost(model, y, yhat)
         if with_gradients
             dc = compute_single_step_gradient(model, dCdz, dCdy)
@@ -110,11 +110,11 @@ function compute_cost(
     end
 
     # get predictions
-    Yhat = model.forecast(X')'  # size=(T, output_size)
+    Yhat = model.forecast(X')  # size=(output_size, T) -> VariableIndexedMatrix
 
     # main loop to compute cost
     for t = 1:T
-        result = _compute_step(Y[t, :], Yhat[t, :])
+        result = _compute_step(Y[t, :], Yhat[t])
         C[t] += result[1]
         dC[t, :] .+= result[2]
     end

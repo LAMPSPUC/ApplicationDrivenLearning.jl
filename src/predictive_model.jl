@@ -3,6 +3,8 @@ using Statistics
 import Zygote
 import Optimisers
 
+include("variable_indexed_structs.jl")
+
 """
     PredictiveModel(networks, input_output_map, input_size, output_size)
 
@@ -36,14 +38,14 @@ julia> pred_model = PredictiveModel(
 ```
 """
 struct PredictiveModel
-    networks::Any
-    input_output_map::Vector{Dict{Vector{Int},Vector{Int}}}
+    networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}}
+    input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing}
     input_size::Int
     output_size::Int
 
     function PredictiveModel(
-        networks,
-        input_output_map::Vector{Dict{Vector{Int},Vector{Int}}},
+        networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}},
+        input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing},
         input_size::Int,
         output_size::Int,
     )
@@ -60,13 +62,13 @@ end
     PredictiveModel(networks::Flux.Chain)
 
 When only one network is passed as a Chain object, input and output
-indexes are directly extracted.
+indexes are directly extracted and the input_output_map is set to nothing.
 """
 function PredictiveModel(network::Flux.Chain)
     param_layers = [layer for layer in network if has_params(layer)]
     input_size = size(param_layers[1].weight, 2)
     output_size = size(param_layers[end].weight, 1)
-    input_output_map = [Dict(collect(1:input_size) => collect(1:output_size))]
+    input_output_map = nothing
     return PredictiveModel(
         [deepcopy(network)],
         input_output_map,
@@ -79,12 +81,12 @@ end
     PredictiveModel(networks::Flux.Dense)
 
 When only one network is passed as a Dense object, input and output
-indexes are directly extracted.
+indexes are directly extracted and the input_output_map is set to nothing.
 """
 function PredictiveModel(network::Flux.Dense)
     input_size = size(network.weight)[2]
     output_size = size(network.weight)[1]
-    input_output_map = [Dict(collect(1:input_size) => collect(1:output_size))]
+    input_output_map = nothing
     return PredictiveModel(
         [deepcopy(network)],
         input_output_map,
@@ -94,14 +96,14 @@ function PredictiveModel(network::Flux.Dense)
 end
 
 """
-    PredictiveModel(networks::Flux.Chain, input_output_map::Dict{Vector{Int}, Vector{Int}})
+    PredictiveModel(networks::Flux.Chain, input_output_map::Dict{Vector{Int}, Vector{Forecast}})
 
 When only one network is passed as a Chain object with explicit
 input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Chain,
-    input_output_map::Dict{Vector{Int},Vector{Int}},
+    input_output_map::Dict{Vector{Int},Vector{Forecast}},
 )
     param_layers = [layer for layer in network if has_params(layer)]
     network_input_size = size(param_layers[1].weight, 2)
@@ -112,7 +114,11 @@ function PredictiveModel(
     end
 
     model_input_size = maximum(maximum.(keys(input_output_map)))
-    model_output_size = maximum(maximum.(values(input_output_map)))
+    model_output_size = length(
+        unique(
+            reduce(vcat, values(input_output_map))
+        )
+    )
     return PredictiveModel(
         [deepcopy(network)],
         [input_output_map],
@@ -122,14 +128,14 @@ function PredictiveModel(
 end
 
 """
-    PredictiveModel(networks::Flux.Dense, input_output_map::Dict{Vector{Int}, Vector{Int}})
+    PredictiveModel(networks::Flux.Dense, input_output_map::Dict{Vector{Int}, Vector{Forecast}})
 
 When only one network is passed as a Dense object with explicit
 input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Dense,
-    input_output_map::Dict{Vector{Int},Vector{Int}},
+    input_output_map::Dict{Vector{Int},Vector{Forecast}},
 )
     network_input_size = size(network.weight)[2]
     network_output_size = size(network.weight)[1]
@@ -139,7 +145,11 @@ function PredictiveModel(
     end
 
     model_input_size = maximum(maximum.(keys(input_output_map)))
-    model_output_size = maximum(maximum.(values(input_output_map)))
+    model_output_size = length(
+        unique(
+            reduce(vcat, values(input_output_map))
+        )
+    )
     return PredictiveModel(
         [deepcopy(network)],
         [input_output_map],
@@ -148,6 +158,31 @@ function PredictiveModel(
     )
 end
 
+"""
+    output_variables(model::PredictiveModel)
+
+Return the variables that are output by the model.
+"""
+function output_variables(model::PredictiveModel)
+    return unique(
+        reduce(
+            vcat, 
+            [
+                reduce(
+                    vcat,
+                    values(iomap)
+                )
+                for iomap in model.input_output_map
+            ]
+        )
+    )
+end
+
+"""
+    (model::PredictiveModel)(X::AbstractMatrix)
+
+Predict the output of the model for a given input matrix.
+"""
 function (model::PredictiveModel)(X::AbstractMatrix)
     pred_size = size(X, 2)
     n_networks = length(model.networks)
@@ -155,30 +190,45 @@ function (model::PredictiveModel)(X::AbstractMatrix)
         Matrix{eltype(X)}(undef, model.output_size, pred_size),
         (model.output_size, pred_size),
     )
+    i = 1
+    out_idx = Vector{Forecast{JuMP.VariableRef}}(undef, model.output_size)
     for inn = 1:n_networks
         io_map = model.input_output_map[inn]
         nn = model.networks[inn]
         for (input_idx, output_idx) in io_map
-            Yhat[output_idx, :] = nn(X[input_idx, :])
+            nn_input_pred = nn(X[input_idx, :])
+            Yhat[i:i+length(output_idx)-1, :] = nn_input_pred
+            out_idx[i:i+length(output_idx)-1] = output_idx
+            i += length(output_idx)
         end
     end
-    return copy(Yhat)
+    return VariableIndexedMatrix(copy(Yhat), out_idx)
 end
 
+"""
+    (model::PredictiveModel)(x::AbstractVector)
+
+Predict the output of the model for a given input vector.
+"""
 function (model::PredictiveModel)(x::AbstractVector)
     n_networks = length(model.networks)
     yhat = Zygote.Buffer(
         Vector{eltype(x)}(undef, model.output_size),
         model.output_size,
     )
+    i = 1
+    out_idx = Vector{Forecast{JuMP.VariableRef}}(undef, model.output_size)
     for inn = 1:n_networks
         io_map = model.input_output_map[inn]
         nn = model.networks[inn]
         for (input_idx, output_idx) in io_map
-            yhat[output_idx] = nn(x[input_idx])
+            nn_input_pred = nn(x[input_idx])
+            yhat[i:i+length(output_idx)-1] = nn_input_pred
+            out_idx[i:i+length(output_idx)-1] = output_idx
+            i += length(output_idx)
         end
     end
-    return copy(yhat)
+    return VariableIndexedVector(copy(yhat), out_idx)
 end
 
 """

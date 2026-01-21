@@ -7,7 +7,6 @@ import ParametricOptInterface as POI
 import Base.*, Base.+
 
 include("flux_utils.jl")
-include("predictive_model.jl")
 
 """
     Policy{T}
@@ -74,6 +73,8 @@ function Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
         return getfield(arr, sym)
     end
 end
+
+include("predictive_model.jl")
 
 """
     Model <: JuMP.AbstractModel
@@ -153,7 +154,7 @@ function set_forecast_model(
     else
         forecast = PredictiveModel(network)
     end
-    @assert forecast.output_size == size(model.forecast_vars, 1)
+    @assert forecast.output_size == size(model.forecast_vars, 1) "Output size of forecast model must match number of forecast variables"
     return model.forecast = forecast
 end
 
@@ -163,6 +164,17 @@ end
 Return forecast model output for given input.
 """
 function forecast(model::Model, X::AbstractMatrix)
+    @assert model.forecast != nothing "Forecast model is not set"
+    @assert model.forecast.input_size == size(X, 1) "Input size of forecast model must match number of input variables (axis 1)"
+
+    # check if input output map is set
+    if model.forecast.input_output_map === nothing
+        # set input output map using forecast variables
+        model.forecast.input_output_map = Dict(
+            collect(1:model.forecast.input_size) => model.forecast_vars
+        )
+    end
+
     return model.forecast(X)
 end
 
