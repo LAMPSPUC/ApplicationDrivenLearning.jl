@@ -6,6 +6,47 @@ import Optimisers
 include("variable_indexed_structs.jl")
 
 """
+    get_ordered_output_variables(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+
+Get the ordered output variables from the input-output map.
+"""
+function get_ordered_output_variables(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+    return reduce(
+        vcat, 
+        [
+            reduce(vcat, values(iomap)) 
+            for iomap in input_output_map
+        ]
+    )
+end
+
+"""
+    get_input_indices(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+
+Get the input indices from the input-output map.
+"""
+function get_input_indices(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+    return unique(
+        reduce(
+            vcat, 
+            [
+                reduce(vcat, keys(iomap)) 
+                for iomap in input_output_map
+            ]
+        )
+    )
+end
+
+"""
+    get_max_input_index(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+
+Get the maximum input index from the input-output maps.
+"""
+function get_max_input_index(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+    return maximum(get_input_indices(input_output_map))
+end
+
+"""
     PredictiveModel(networks, input_output_map, input_size, output_size)
 
 Creates a predictive (forecast) model for the AppDrivenLearning module
@@ -16,9 +57,10 @@ from Flux models and input/output information.
 # Arguments
 
   - `networks`: array of Flux models to be used.
-  - `input_output_map::Vector{Dict{Vector{Int}, Vector{Int}}}`: array in the
+  - `input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing}`: array in the
     same ordering as networks of mappings from input indexes to output indexes
     on which the models should be applied.
+  - `output_variables::Union{Vector{Forecast{JuMP.VariableRef}},Nothing}`: array of output variables to be used.
   - `input_size::Int`: size of the input vector.
   - `output_size::Int`: size of the output vector.
     ...
@@ -40,22 +82,47 @@ julia> pred_model = PredictiveModel(
 struct PredictiveModel
     networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}}
     input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing}
+    output_variables::Union{Vector{Forecast{JuMP.VariableRef}},Nothing}
     input_size::Int
     output_size::Int
 
     function PredictiveModel(
         networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}},
         input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing},
+        output_variables::Union{Vector{Forecast{JuMP.VariableRef}},Nothing},
         input_size::Int,
         output_size::Int,
     )
         return new(
             deepcopy(networks),
             input_output_map,
+            output_variables,
             input_size,
-            output_size,
+            output_size
         )
     end
+end
+
+"""
+    PredictiveModel(networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}}, input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing})
+
+Creates a predictive (forecast) model for the AppDrivenLearning module
+from Flux models and input/output map.
+"""
+function PredictiveModel(
+    networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}},
+    input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing},
+)
+    output_variables = get_ordered_output_variables(input_output_map)
+    input_size = get_max_input_index(input_output_map)
+    output_size = length(output_variables)
+    return ApplicationDrivenLearning.PredictiveModel(
+        networks,
+        input_output_map,
+        output_variables,
+        input_size,
+        output_size
+    )
 end
 
 """
@@ -68,10 +135,10 @@ function PredictiveModel(network::Flux.Chain)
     param_layers = [layer for layer in network if has_params(layer)]
     input_size = size(param_layers[1].weight, 2)
     output_size = size(param_layers[end].weight, 1)
-    input_output_map = nothing
     return PredictiveModel(
         [deepcopy(network)],
-        input_output_map,
+        nothing,
+        nothing,
         input_size,
         output_size,
     )
@@ -86,10 +153,10 @@ indexes are directly extracted and the input_output_map is set to nothing.
 function PredictiveModel(network::Flux.Dense)
     input_size = size(network.weight)[2]
     output_size = size(network.weight)[1]
-    input_output_map = nothing
     return PredictiveModel(
         [deepcopy(network)],
-        input_output_map,
+        nothing,
+        nothing,
         input_size,
         output_size,
     )
@@ -103,7 +170,7 @@ input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Chain,
-    input_output_map::Dict{Vector{Int},Vector{Forecast}},
+    input_output_map::Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}},
 )
     param_layers = [layer for layer in network if has_params(layer)]
     network_input_size = size(param_layers[1].weight, 2)
@@ -113,17 +180,15 @@ function PredictiveModel(
         @assert length(output_idx) == network_output_size "Output indexes length must match model output size."
     end
 
-    model_input_size = maximum(maximum.(keys(input_output_map)))
-    model_output_size = length(
-        unique(
-            reduce(vcat, values(input_output_map))
-        )
-    )
+    output_variables = get_ordered_output_variables([input_output_map])
+    input_size = get_max_input_index([input_output_map])
+    output_size = length(output_variables)
     return PredictiveModel(
         [deepcopy(network)],
         [input_output_map],
-        model_input_size,
-        model_output_size,
+        output_variables,
+        input_size,
+        output_size,
     )
 end
 
@@ -135,7 +200,7 @@ input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Dense,
-    input_output_map::Dict{Vector{Int},Vector{Forecast}},
+    input_output_map::Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}},
 )
     network_input_size = size(network.weight)[2]
     network_output_size = size(network.weight)[1]
@@ -144,91 +209,116 @@ function PredictiveModel(
         @assert length(output_idx) == network_output_size "Output indexes length must match model output size."
     end
 
-    model_input_size = maximum(maximum.(keys(input_output_map)))
-    model_output_size = length(
-        unique(
-            reduce(vcat, values(input_output_map))
-        )
-    )
+    output_variables = get_ordered_output_variables([input_output_map])
+    input_size = get_max_input_index([input_output_map])
+    output_size = length(output_variables)
     return PredictiveModel(
         [deepcopy(network)],
         [input_output_map],
-        model_input_size,
-        model_output_size,
+        output_variables,
+        input_size,
+        output_size,
     )
 end
 
 """
-    output_variables(model::PredictiveModel)
+    Flux.trainable(model::PredictiveModel)
 
-Return the variables that are output by the model.
+Make PredictiveModel compatible with Flux's training interface by
+specifying that only the networks field is trainable.
 """
-function output_variables(model::PredictiveModel)
-    return unique(
-        reduce(
-            vcat, 
-            [
-                reduce(
-                    vcat,
-                    values(iomap)
-                )
-                for iomap in model.input_output_map
-            ]
-        )
-    )
-end
+Flux.trainable(model::PredictiveModel) = (networks = model.networks,)
 
 """
-    (model::PredictiveModel)(X::AbstractMatrix)
+    (model::PredictiveModel)(X::AbstractMatrix, ignore_index::Bool = false)
 
 Predict the output of the model for a given input matrix.
 """
-function (model::PredictiveModel)(X::AbstractMatrix)
-    pred_size = size(X, 2)
-    n_networks = length(model.networks)
+function (model::PredictiveModel)(X::AbstractMatrix, ignore_index::Bool = false)
+    pred_size = size(X, 2)  # length of the input data
+    n_networks = length(model.networks)  # number of networks in the model
+    # buffer to store the predicted output
     Yhat = Zygote.Buffer(
         Matrix{eltype(X)}(undef, model.output_size, pred_size),
         (model.output_size, pred_size),
     )
+    # initialize the index of the output variables to be returned
     i = 1
     out_idx = Vector{Forecast{JuMP.VariableRef}}(undef, model.output_size)
+
+    # no input-output map case
+    if model.input_output_map == nothing
+        # there should only be one network in the model
+        @assert n_networks == 1 "There should only be one network in the predictive model when there is no input-output map."
+        # apply the network to the input
+        return model.networks[1](X)
+    end
+
     for inn = 1:n_networks
         io_map = model.input_output_map[inn]
         nn = model.networks[inn]
         for (input_idx, output_idx) in io_map
             nn_input_pred = nn(X[input_idx, :])
             Yhat[i:i+length(output_idx)-1, :] = nn_input_pred
-            out_idx[i:i+length(output_idx)-1] = output_idx
+            if !ignore_index
+                out_idx[i:i+length(output_idx)-1] = output_idx
+            end
             i += length(output_idx)
         end
     end
-    return VariableIndexedMatrix(copy(Yhat), out_idx)
+    if ignore_index
+        return copy(Yhat)
+    else
+        return VariableIndexedMatrix(copy(Yhat), out_idx)
+    end
 end
 
 """
-    (model::PredictiveModel)(x::AbstractVector)
+    (model::PredictiveModel)(x::AbstractVector, ignore_index::Bool = false)
 
-Predict the output of the model for a given input vector.
+Predict the output of the model for a given input vector. 
+If the model has no input-output map, the network is applied directly to the input.
+If ignore_index is true, the output variables are not returned.
 """
-function (model::PredictiveModel)(x::AbstractVector)
-    n_networks = length(model.networks)
+function (model::PredictiveModel)(x::AbstractVector, ignore_index::Bool = false)
+    n_networks = length(model.networks)  # number of networks in the model
+    # buffer to store the predicted output
     yhat = Zygote.Buffer(
         Vector{eltype(x)}(undef, model.output_size),
         model.output_size,
     )
+    # initialize the index of the output variables to be returned
     i = 1
     out_idx = Vector{Forecast{JuMP.VariableRef}}(undef, model.output_size)
+
+    # no input-output map case
+    if model.input_output_map == nothing
+        # there should only be one network in the model
+        @assert n_networks == 1 "There should only be one network in the predictive model when there is no input-output map."
+        # apply the network to the input
+        return model.networks[1](x)
+    end
+
+    # input-output map case
     for inn = 1:n_networks
+        # gets the input-output map for the current network
         io_map = model.input_output_map[inn]
         nn = model.networks[inn]
         for (input_idx, output_idx) in io_map
             nn_input_pred = nn(x[input_idx])
+            # set the predicted output for the current output variables indices
             yhat[i:i+length(output_idx)-1] = nn_input_pred
-            out_idx[i:i+length(output_idx)-1] = output_idx
+            if !ignore_index
+                out_idx[i:i+length(output_idx)-1] = output_idx
+            end
             i += length(output_idx)
         end
     end
-    return VariableIndexedVector(copy(yhat), out_idx)
+    if ignore_index
+        return copy(yhat)
+    else
+        return VariableIndexedVector(copy(yhat), out_idx)
+    end
 end
 
 """
@@ -266,11 +356,21 @@ Apply a gradient vector to the model parameters.
 """
 function apply_gradient!(
     model::PredictiveModel,
-    dCdy::Vector{<:Real},
+    dCdy::AbstractVector{<:Real},
     X::Matrix{<:Real},
     opt_state,
 )
-    loss3(m, X) = mean(dCdy'm(X'))
+    loss3(m, X) = mean(dCdy'm(X', true))
     grad = Zygote.gradient(loss3, model, X)[1]
     return Optimisers.update!(opt_state, model, grad)
 end
+
+function apply_gradient!(
+    model::PredictiveModel,
+    dCdy::VariableIndexedVector{<:Real},
+    X::Matrix{<:Real},
+    opt_state,
+)
+    return apply_gradient!(model, dCdy[model.output_variables].data, X, opt_state)
+end
+
