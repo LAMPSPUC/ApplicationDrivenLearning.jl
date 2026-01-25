@@ -1,7 +1,7 @@
 import LinearAlgebra
 
 """
-    VariableIndexedVector(data::Vector{T}, index::Vector{Forecast{JuMP.VariableRef}})
+    VariableIndexedVector(data::Vector{T}, index::Vector{<:Forecast})
 
 A vector that can be indexed by Forecast variables.
 
@@ -10,20 +10,20 @@ A vector that can be indexed by Forecast variables.
 # Arguments
 
   - `data::Vector{T}`: data vector.
-  - `index::Vector{Forecast{JuMP.VariableRef}}`: index vector.
+  - `index::Vector{<:Forecast}`: index vector.
 """
 struct VariableIndexedVector{T} <: AbstractVector{T}
     data::Vector{T}
-    index::Vector{Forecast{JuMP.VariableRef}}
+    index::Vector{<:Forecast}
 
     # Inner constructor to enforce length consistency
-    function VariableIndexedVector(data::Vector{T}, index::Vector{Forecast{JuMP.VariableRef}}) where T
+    function VariableIndexedVector(data::Vector{T}, index::Vector{<:Forecast}) where T
         @assert length(data) == length(index) "Data and Variable index must have the same length"
         @assert length(unique(index)) == length(index) "Variables must be unique"
         new{T}(data, index)
     end
 
-    function VariableIndexedVector{T}(::UndefInitializer, index::Vector{Forecast{JuMP.VariableRef}}) where T
+    function VariableIndexedVector{T}(::UndefInitializer, index::Vector{<:Forecast}) where T
         return new{T}(Vector{T}(undef, length(index)), index)
     end
 end
@@ -45,7 +45,7 @@ function LinearAlgebra.dot(v1::VariableIndexedVector, v2::VariableIndexedVector)
 end
 
 # helper to find index of a Forecast variable
-function _get_idx(v::VariableIndexedVector, var::Forecast{JuMP.VariableRef})
+function _get_idx(v::VariableIndexedVector, var::Forecast)
     i = findfirst(isequal(var), v.index)
     if isnothing(i)
         throw(KeyError(var))
@@ -59,11 +59,11 @@ function Base.getindex(v::VariableIndexedVector, indices::AbstractVector{Int})
 end
 
 # indexing by Forecast variables
-function Base.getindex(v::VariableIndexedVector, var::Forecast{JuMP.VariableRef})
+function Base.getindex(v::VariableIndexedVector, var::Forecast)
     return v.data[_get_idx(v, var)]
 end
 
-function Base.setindex!(v::VariableIndexedVector, val, var::Forecast{JuMP.VariableRef})
+function Base.setindex!(v::VariableIndexedVector, val, var::Forecast)
     v.data[_get_idx(v, var)] = val
 end
 
@@ -78,7 +78,7 @@ function Base.setindex!(v::VariableIndexedVector, values::AbstractVector, vars::
 end
 
 """
-    VariableIndexedMatrix(data::Matrix{T}, row_index::Vector{Forecast{JuMP.VariableRef}})
+    VariableIndexedMatrix(data::Matrix{T}, row_index::Vector{<:Forecast})
 
 A matrix that can be indexed by Forecast variables in the rows.
 
@@ -87,13 +87,13 @@ A matrix that can be indexed by Forecast variables in the rows.
 # Arguments
 
   - `data::Matrix{T}`: data matrix.
-  - `row_index::Vector{Forecast{JuMP.VariableRef}}`: row index.
+  - `row_index::Vector{<:Forecast}`: row index.
 """
 struct VariableIndexedMatrix{T} <: AbstractMatrix{T}
     data::Matrix{T}
-    row_index::Vector{Forecast{JuMP.VariableRef}}
+    row_index::Vector{<:Forecast}
 
-    function VariableIndexedMatrix(data::Matrix{T}, row_index::Vector{Forecast{JuMP.VariableRef}}) where T
+    function VariableIndexedMatrix(data::Matrix{T}, row_index::Vector{<:Forecast}) where T
         @assert size(data, 1) == length(row_index) "Number of rows in data must match number of row indices"
         @assert length(unique(row_index)) == length(row_index) "Variables must be unique"
         new{T}(data, row_index)

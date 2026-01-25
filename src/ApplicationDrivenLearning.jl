@@ -155,6 +155,21 @@ function set_forecast_model(
         forecast = PredictiveModel(network)
     end
     @assert forecast.output_size == size(model.forecast_vars, 1) "Output size of forecast model must match number of forecast variables"
+
+    # set input_output_map of forecast model if not set
+    if forecast.input_output_map == nothing
+        forecast = PredictiveModel(
+            deepcopy(forecast.networks),
+            [
+                Dict(
+                    collect(1:forecast.input_size) => model.forecast_vars
+                )
+            ],
+            model.forecast_vars,
+            forecast.input_size,
+            forecast.output_size,
+        )
+    end
     return model.forecast = forecast
 end
 

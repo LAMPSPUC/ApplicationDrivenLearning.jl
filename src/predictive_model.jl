@@ -1,16 +1,17 @@
 using Flux
 using Statistics
 import Zygote
+import Functors
 import Optimisers
 
 include("variable_indexed_structs.jl")
 
 """
-    get_ordered_output_variables(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+    get_ordered_output_variables(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
 
 Get the ordered output variables from the input-output map.
 """
-function get_ordered_output_variables(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+function get_ordered_output_variables(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
     return reduce(
         vcat, 
         [
@@ -21,11 +22,11 @@ function get_ordered_output_variables(input_output_map::Vector{Dict{Vector{Int},
 end
 
 """
-    get_input_indices(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+    get_input_indices(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
 
 Get the input indices from the input-output map.
 """
-function get_input_indices(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+function get_input_indices(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
     return unique(
         reduce(
             vcat, 
@@ -38,11 +39,11 @@ function get_input_indices(input_output_map::Vector{Dict{Vector{Int},Vector{Fore
 end
 
 """
-    get_max_input_index(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+    get_max_input_index(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
 
 Get the maximum input index from the input-output maps.
 """
-function get_max_input_index(input_output_map::Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}})
+function get_max_input_index(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
     return maximum(get_input_indices(input_output_map))
 end
 
@@ -57,10 +58,10 @@ from Flux models and input/output information.
 # Arguments
 
   - `networks`: array of Flux models to be used.
-  - `input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing}`: array in the
+  - `input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing}`: array in the
     same ordering as networks of mappings from input indexes to output indexes
     on which the models should be applied.
-  - `output_variables::Union{Vector{Forecast{JuMP.VariableRef}},Nothing}`: array of output variables to be used.
+  - `output_variables::Union{Vector{<:Forecast},Nothing}`: array of output variables to be used.
   - `input_size::Int`: size of the input vector.
   - `output_size::Int`: size of the output vector.
     ...
@@ -81,15 +82,15 @@ julia> pred_model = PredictiveModel(
 """
 struct PredictiveModel
     networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}}
-    input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing}
-    output_variables::Union{Vector{Forecast{JuMP.VariableRef}},Nothing}
+    input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing}
+    output_variables::Union{Vector{<:Forecast},Nothing}
     input_size::Int
     output_size::Int
 
     function PredictiveModel(
         networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}},
-        input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing},
-        output_variables::Union{Vector{Forecast{JuMP.VariableRef}},Nothing},
+        input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing},
+        output_variables::Union{Vector{<:Forecast},Nothing},
         input_size::Int,
         output_size::Int,
     )
@@ -104,14 +105,14 @@ struct PredictiveModel
 end
 
 """
-    PredictiveModel(networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}}, input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing})
+    PredictiveModel(networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}}, input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing})
 
 Creates a predictive (forecast) model for the AppDrivenLearning module
 from Flux models and input/output map.
 """
 function PredictiveModel(
     networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}},
-    input_output_map::Union{Vector{Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}}},Nothing},
+    input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing},
 )
     output_variables = get_ordered_output_variables(input_output_map)
     input_size = get_max_input_index(input_output_map)
@@ -163,14 +164,14 @@ function PredictiveModel(network::Flux.Dense)
 end
 
 """
-    PredictiveModel(networks::Flux.Chain, input_output_map::Dict{Vector{Int}, Vector{Forecast}})
+    PredictiveModel(networks::Flux.Chain, input_output_map::Dict{Vector{Int}, <:Vector{<:Forecast}})
 
 When only one network is passed as a Chain object with explicit
 input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Chain,
-    input_output_map::Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}},
+    input_output_map::Dict{Vector{Int},<:Vector{<:Forecast}},
 )
     param_layers = [layer for layer in network if has_params(layer)]
     network_input_size = size(param_layers[1].weight, 2)
@@ -193,14 +194,14 @@ function PredictiveModel(
 end
 
 """
-    PredictiveModel(networks::Flux.Dense, input_output_map::Dict{Vector{Int}, Vector{Forecast}})
+    PredictiveModel(networks::Flux.Dense, input_output_map::Dict{Vector{Int}, <:Vector{<:Forecast}})
 
 When only one network is passed as a Dense object with explicit
 input to output mapping, input and output sizes are directly extracted.
 """
 function PredictiveModel(
     network::Flux.Dense,
-    input_output_map::Dict{Vector{Int},Vector{Forecast{JuMP.VariableRef}}},
+    input_output_map::Dict{Vector{Int},<:Vector{<:Forecast}},
 )
     network_input_size = size(network.weight)[2]
     network_output_size = size(network.weight)[1]
@@ -228,6 +229,9 @@ Make PredictiveModel compatible with Flux's training interface by
 specifying that only the networks field is trainable.
 """
 Flux.trainable(model::PredictiveModel) = (networks = model.networks,)
+
+# Tells Flux to only look at the 'network' field when setting up or traversing
+@Functors.functor PredictiveModel (networks,)
 
 """
     (model::PredictiveModel)(X::AbstractMatrix, ignore_index::Bool = false)
