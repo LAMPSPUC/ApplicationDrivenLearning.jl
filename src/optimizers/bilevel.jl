@@ -5,7 +5,7 @@ using BilevelJuMP
 function solve_bilevel(
     model::Model,
     X::Matrix{<:Real},
-    Y::Dict{<:Forecast, <:Vector},
+    Y::Dict{<:Forecast,<:Vector},
     params::Dict{Symbol,Any},
 )
 
@@ -164,10 +164,7 @@ function solve_bilevel(
     # and apply prediction on lower model as constraint
     for pred_var in model.forecast_vars
         low_pred_var = low_var_map[pred_var.plan]
-        @constraint(
-            Lower(bilevel_model),
-            low_pred_var .- y_hat[pred_var] .== 0
-        )
+        @constraint(Lower(bilevel_model), low_pred_var .- y_hat[pred_var] .== 0)
     end
 
     # solve model

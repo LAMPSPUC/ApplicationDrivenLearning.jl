@@ -25,7 +25,7 @@ end
 function train_with_gradient!(
     model::Model,
     X::Matrix{<:Real},
-    Y::Dict{<:Forecast, <:Vector},
+    Y::Dict{<:Forecast,<:Vector},
     params::Dict{Symbol,Any},
 )
     # extract params

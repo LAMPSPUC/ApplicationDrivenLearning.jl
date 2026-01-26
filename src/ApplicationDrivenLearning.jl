@@ -160,11 +160,7 @@ function set_forecast_model(
     if forecast.input_output_map == nothing
         forecast = PredictiveModel(
             deepcopy(forecast.networks),
-            [
-                Dict(
-                    collect(1:forecast.input_size) => model.forecast_vars
-                )
-            ],
+            [Dict(collect(1:forecast.input_size) => model.forecast_vars)],
             model.forecast_vars,
             forecast.input_size,
             forecast.output_size,
@@ -185,9 +181,8 @@ function forecast(model::Model, X::AbstractMatrix)
     # check if input output map is set
     if model.forecast.input_output_map === nothing
         # set input output map using forecast variables
-        model.forecast.input_output_map = Dict(
-            collect(1:model.forecast.input_size) => model.forecast_vars
-        )
+        model.forecast.input_output_map =
+            Dict(collect(1:model.forecast.input_size) => model.forecast_vars)
     end
 
     return model.forecast(X)
@@ -251,7 +246,7 @@ Train model using given data and options.
 function train!(
     model::Model,
     X::Matrix{<:Real},
-    y::Dict{<:Forecast, <:Vector},
+    y::Dict{<:Forecast,<:Vector},
     options::Options,
 )
     if options.mode == NelderMeadMode

@@ -107,10 +107,8 @@ end
     nn1 = Flux.Dense(model_in_size => model_out_size) |> f64
     nn2 = Flux.Dense(model_in_size => model_out_size) |> f64
     in_out_map = [Dict([1, 2] => [f[1]]), Dict([1, 3] => [f[2]])]
-    forecaster = ApplicationDrivenLearning.PredictiveModel(
-        [nn1, nn2],
-        in_out_map,
-    )
+    forecaster =
+        ApplicationDrivenLearning.PredictiveModel([nn1, nn2], in_out_map)
 
     x = ones((in_size, 1))
     @test size(forecaster(x)) == (out_size, 1)

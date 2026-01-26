@@ -4,7 +4,12 @@ function compute_single_step_cost(
     yhat::VariableIndexedVector,
 )
     # set forecast params as prediction output
-    MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat[model.forecast_vars].data)
+    MOI.set.(
+        model.plan,
+        POI.ParameterValue(),
+        model.plan_forecast_params,
+        yhat[model.forecast_vars].data,
+    )
     # optimize plan model
     optimize!(model.plan)
     # check for solution and fix assess policy vars
@@ -81,7 +86,7 @@ Compute the cost function (C) based on the model predictions and the true values
 function compute_cost(
     model::Model,
     X::Matrix{<:Real},
-    Y::Dict{<:Forecast, <:Vector},
+    Y::Dict{<:Forecast,<:Vector},
     with_gradients::Bool = false,
     aggregate::Bool = true,
 )
@@ -100,7 +105,7 @@ function compute_cost(
     dCdy = VariableIndexedVector{Float32}(undef, model.forecast_vars)
     dC = VariableIndexedMatrix{Float32}(undef, model.forecast_vars, T)
 
-    function _get_index_y(Y::Dict{<:Forecast, <:Vector}, idx::Int)
+    function _get_index_y(Y::Dict{<:Forecast,<:Vector}, idx::Int)
         var_index = Vector{Forecast}(undef, model.forecast.output_size)
         y_values = Vector{Real}(undef, model.forecast.output_size)
         for (i, (fvar, vals)) in enumerate(Y)
@@ -110,7 +115,10 @@ function compute_cost(
         return VariableIndexedVector(y_values, var_index)
     end
 
-    function _compute_step(y::VariableIndexedVector, yhat::VariableIndexedVector)
+    function _compute_step(
+        y::VariableIndexedVector,
+        yhat::VariableIndexedVector,
+    )
         c = compute_single_step_cost(model, y, yhat)
         if with_gradients
             dc = compute_single_step_gradient(model, dCdz, dCdy)

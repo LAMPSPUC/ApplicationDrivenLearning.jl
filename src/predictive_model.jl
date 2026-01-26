@@ -11,13 +11,12 @@ include("variable_indexed_structs.jl")
 
 Get the ordered output variables from the input-output map.
 """
-function get_ordered_output_variables(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
+function get_ordered_output_variables(
+    input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
+)
     return reduce(
-        vcat, 
-        [
-            reduce(vcat, values(iomap)) 
-            for iomap in input_output_map
-        ]
+        vcat,
+        [reduce(vcat, values(iomap)) for iomap in input_output_map],
     )
 end
 
@@ -26,15 +25,11 @@ end
 
 Get the input indices from the input-output map.
 """
-function get_input_indices(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
+function get_input_indices(
+    input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
+)
     return unique(
-        reduce(
-            vcat, 
-            [
-                reduce(vcat, keys(iomap)) 
-                for iomap in input_output_map
-            ]
-        )
+        reduce(vcat, [reduce(vcat, keys(iomap)) for iomap in input_output_map]),
     )
 end
 
@@ -43,7 +38,9 @@ end
 
 Get the maximum input index from the input-output maps.
 """
-function get_max_input_index(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
+function get_max_input_index(
+    input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
+)
     return maximum(get_input_indices(input_output_map))
 end
 
@@ -82,14 +79,20 @@ julia> pred_model = PredictiveModel(
 """
 struct PredictiveModel
     networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}}
-    input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing}
+    input_output_map::Union{
+        Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
+        Nothing,
+    }
     output_variables::Union{Vector{<:Forecast},Nothing}
     input_size::Int
     output_size::Int
 
     function PredictiveModel(
         networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}},
-        input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing},
+        input_output_map::Union{
+            Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
+            Nothing,
+        },
         output_variables::Union{Vector{<:Forecast},Nothing},
         input_size::Int,
         output_size::Int,
@@ -99,7 +102,7 @@ struct PredictiveModel
             input_output_map,
             output_variables,
             input_size,
-            output_size
+            output_size,
         )
     end
 end
@@ -112,7 +115,10 @@ from Flux models and input/output map.
 """
 function PredictiveModel(
     networks::Union{Vector{<:Flux.Chain},Vector{<:Flux.Dense}},
-    input_output_map::Union{Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},Nothing},
+    input_output_map::Union{
+        Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
+        Nothing,
+    },
 )
     output_variables = get_ordered_output_variables(input_output_map)
     input_size = get_max_input_index(input_output_map)
@@ -122,7 +128,7 @@ function PredictiveModel(
         input_output_map,
         output_variables,
         input_size,
-        output_size
+        output_size,
     )
 end
 
@@ -231,7 +237,7 @@ specifying that only the networks field is trainable.
 Flux.trainable(model::PredictiveModel) = (networks = model.networks,)
 
 # Tells Flux to only look at the 'network' field when setting up or traversing
-@Functors.functor PredictiveModel (networks,)
+Functors.@functor PredictiveModel (networks,)
 
 """
     (model::PredictiveModel)(X::AbstractMatrix, ignore_index::Bool = false)
@@ -280,7 +286,7 @@ end
 """
     (model::PredictiveModel)(x::AbstractVector, ignore_index::Bool = false)
 
-Predict the output of the model for a given input vector. 
+Predict the output of the model for a given input vector.
 If the model has no input-output map, the network is applied directly to the input.
 If ignore_index is true, the output variables are not returned.
 """
@@ -375,6 +381,10 @@ function apply_gradient!(
     X::Matrix{<:Real},
     opt_state,
 )
-    return apply_gradient!(model, dCdy[model.output_variables].data, X, opt_state)
+    return apply_gradient!(
+        model,
+        dCdy[model.output_variables].data,
+        X,
+        opt_state,
+    )
 end
-
