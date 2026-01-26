@@ -3,7 +3,7 @@ using Optim
 function train_with_nelder_mead!(
     model::Model,
     X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    Y::Dict{<:Forecast, <:Vector},
     params::Dict{Symbol,Any},
 )
 

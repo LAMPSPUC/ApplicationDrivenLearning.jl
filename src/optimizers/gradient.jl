@@ -5,7 +5,8 @@ Compute assess cost and cost gradient (with respect to predicted values) based
 on incomplete batch of examples.
 """
 function stochastic_compute(model, X, Y, batch, compute_full_cost::Bool)
-    C, dC = compute_cost(model, X[batch, :], Y[batch, :], true)
+    Y_batch = Dict(k => v[batch] for (k, v) in Y)
+    C, dC = compute_cost(model, X[batch, :], Y_batch, true)
     if compute_full_cost
         C = compute_cost(model, X, Y, false)
     end
@@ -24,7 +25,7 @@ end
 function train_with_gradient!(
     model::Model,
     X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    Y::Dict{<:Forecast, <:Vector},
     params::Dict{Symbol,Any},
 )
     # extract params

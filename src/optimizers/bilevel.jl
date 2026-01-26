@@ -5,7 +5,7 @@ using BilevelJuMP
 function solve_bilevel(
     model::Model,
     X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    Y::Dict{<:Forecast, <:Vector},
     params::Dict{Symbol,Any},
 )
 
@@ -23,7 +23,7 @@ function solve_bilevel(
     end
 
     # parameters
-    T = size(Y, 1)
+    T = size(X, 1)
 
     # lower model variables
     low_var_map =
@@ -107,22 +107,21 @@ function solve_bilevel(
     @objective(Upper(bilevel_model), post_obj_sense, up_obj)
 
     # fix upper model observations
-    i_obs_var = 1
-    for obs_var in assess_forecast_vars(model)
+    for obs_var in model.forecast_vars
         @constraint(
             Upper(bilevel_model),
-            up_var_map[obs_var] - Y[1:T, i_obs_var] .== 0
+            up_var_map[obs_var.assess] - Y[obs_var] .== 0
         )
-        i_obs_var += 1
     end
 
     # implement predictive model expression iterating through 
     # models and layers to create predictive expression
     npreds = size(model.forecast.networks, 1)
     predictive_model_vars = [Dict{Int,Any}() for ipred = 1:npreds]
-    y_hat = Matrix{Any}(undef, size(Y, 1), size(Y, 2))
+    # y_hat = Matrix{Any}(undef, size(Y, 1), size(Y, 2))
+    y_hat = VariableIndexedMatrix{Any}(nothing, model.forecast_vars, T)
     for ipred = 1:npreds
-        layers_inpt = Dict{Any,Any}(
+        layers_inpt = Dict{Vector{Forecast},Matrix{Any}}(
             output_idx => X[1:T, input_idx] for (input_idx, output_idx) in
             model.forecast.input_output_map[ipred]
         )
@@ -158,19 +157,17 @@ function solve_bilevel(
             i_layer += 1
         end
         for (output_idx, prediction) in layers_inpt
-            y_hat[:, output_idx] = prediction
+            y_hat[output_idx] = prediction
         end
     end
 
     # and apply prediction on lower model as constraint
-    ipred_var_count = 1
-    for pred_var in plan_forecast_vars(model)
-        low_pred_var = low_var_map[pred_var]
+    for pred_var in model.forecast_vars
+        low_pred_var = low_var_map[pred_var.plan]
         @constraint(
             Lower(bilevel_model),
-            low_pred_var .- y_hat[:, ipred_var_count] .== 0
+            low_pred_var .- y_hat[pred_var] .== 0
         )
-        ipred_var_count += 1
     end
 
     # solve model

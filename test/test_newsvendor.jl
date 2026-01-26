@@ -1,10 +1,6 @@
 c = 5.0
 q = 9.0
 r = 4.0
-X = ones(1, 1)
-Y = 50 * ones(1, 1)
-best_decision = y = Y[1, 1]
-best_cost = (c - q) * y
 
 model = ApplicationDrivenLearning.Model()
 @variables(model, begin
@@ -43,6 +39,11 @@ end)
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 nn = Chain(Dense(1 => 1; bias = false, init = (size...) -> rand(size...)))
+
+X = ones(1, 1)
+Y = Dict(d => [50.0])
+best_decision = y = Y[d][1]
+best_cost = (c - q) * y
 
 @testset "Newsvendor BilevelMode" begin
     ApplicationDrivenLearning.set_forecast_model(
@@ -87,7 +88,7 @@ end
     opt = ApplicationDrivenLearning.Options(
         ApplicationDrivenLearning.GradientMode;
         rule = Flux.Adam(1.0),
-        epochs = 150,
+        epochs = 200,
         batch_size = -1,
         verbose = false,
     )

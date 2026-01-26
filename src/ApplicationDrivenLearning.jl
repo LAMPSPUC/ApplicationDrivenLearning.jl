@@ -251,7 +251,7 @@ Train model using given data and options.
 function train!(
     model::Model,
     X::Matrix{<:Real},
-    y::Matrix{<:Real},
+    y::Dict{<:Forecast, <:Vector},
     options::Options,
 )
     if options.mode == NelderMeadMode

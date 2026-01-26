@@ -1,10 +1,10 @@
 function compute_single_step_cost(
     model::Model,
-    y::Vector{<:Real},
+    y::VariableIndexedVector,
     yhat::VariableIndexedVector,
 )
     # set forecast params as prediction output
-    MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat[model.forecast_vars])
+    MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat[model.forecast_vars].data)
     # optimize plan model
     optimize!(model.plan)
     # check for solution and fix assess policy vars
@@ -18,7 +18,7 @@ function compute_single_step_cost(
         throw(e)
     end
     # fix assess forecast vars on observer values
-    fix.(assess_forecast_vars(model), y; force = true)
+    fix.(model.forecast_vars.assess, y[model.forecast_vars].data; force = true)
     # optimize assess model
     optimize!(model.assess)
     # check for optimization
@@ -38,7 +38,7 @@ Computes the gradient of the cost function (C) with respect to the predictions (
 function compute_single_step_gradient(
     model::Model,
     dCdz::Vector{<:Real},
-    dCdy::Vector{<:Real},
+    dCdy::VariableIndexedVector{<:Real},
 )
     dCdz .= dual.(model.assess[:assess_policy_fix])
     DiffOpt.empty_input_sensitivities!(model.plan)
@@ -51,12 +51,12 @@ function compute_single_step_gradient(
         )
     end
     DiffOpt.reverse_differentiate!(model.plan)
-    for j = 1:size(model.forecast_vars, 1)
-        dCdy[j] =
+    for fv in model.forecast_vars
+        dCdy[fv] =
             MOI.get(
                 model.plan,
                 DiffOpt.ReverseConstraintSet(),
-                ParameterRef(model.plan_forecast_params[j]),
+                ParameterRef(fv.plan),
             ).value
     end
 
@@ -81,26 +81,36 @@ Compute the cost function (C) based on the model predictions and the true values
 function compute_cost(
     model::Model,
     X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    Y::Dict{<:Forecast, <:Vector},
     with_gradients::Bool = false,
     aggregate::Bool = true,
 )
 
     # data size assertions
     @assert size(X)[2] == model.forecast.input_size "Input size mismatch"
-    @assert size(Y)[2] == model.forecast.output_size "Output size mismatch"
+    @assert length(Y) == model.forecast.output_size "Output size mismatch"
 
     # build model variables if necessary
     build(model)
 
     # init parameters
-    T = size(Y)[1]
-    C = zeros(T)
-    dC = zeros((T, model.forecast.output_size))
+    T = length.(collect(values(Y)))[1]
+    C = Vector{Float32}(undef, T)
     dCdz = Vector{Float32}(undef, size(model.policy_vars, 1))
-    dCdy = Vector{Float32}(undef, model.forecast.output_size)
+    dCdy = VariableIndexedVector{Float32}(undef, model.forecast_vars)
+    dC = VariableIndexedMatrix{Float32}(undef, model.forecast_vars, T)
 
-    function _compute_step(y::Vector{<:Real}, yhat::VariableIndexedVector)
+    function _get_index_y(Y::Dict{<:Forecast, <:Vector}, idx::Int)
+        var_index = Vector{Forecast}(undef, model.forecast.output_size)
+        y_values = Vector{Real}(undef, model.forecast.output_size)
+        for (i, (fvar, vals)) in enumerate(Y)
+            var_index[i] = fvar
+            y_values[i] = vals[idx]
+        end
+        return VariableIndexedVector(y_values, var_index)
+    end
+
+    function _compute_step(y::VariableIndexedVector, yhat::VariableIndexedVector)
         c = compute_single_step_cost(model, y, yhat)
         if with_gradients
             dc = compute_single_step_gradient(model, dCdz, dCdy)
@@ -114,15 +124,15 @@ function compute_cost(
 
     # main loop to compute cost
     for t = 1:T
-        result = _compute_step(Y[t, :], Yhat[t])
-        C[t] += result[1]
-        dC[t, :] .+= result[2]
+        result = _compute_step(_get_index_y(Y, t), Yhat[t])
+        C[t] = result[1]
+        dC[t] = result[2]
     end
 
     # aggregate cost if requested
     if aggregate
         C = sum(C) / T
-        dC = sum(dC, dims = 1)[1, :] / T
+        dC = sum(dC) / T
     end
 
     if with_gradients
