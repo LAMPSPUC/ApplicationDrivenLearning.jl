@@ -53,8 +53,7 @@ We can check how the model performs by computing the assess cost with the initia
 
 ```julia
 X = ones(2, 1) .|> Float32
-Y = zeros(2, 1) .|> Float32
-Y[2, 1] = 2.0
+Y = Dict(y => [0.0, 2.0] .|> Float32)
 set_optimizer(model, Gurobi.Optimizer)
 set_silent(model)
 ```
@@ -121,10 +120,10 @@ Iter     Function value    √(Σ(yᵢ-ȳ)²)/n
  * time: 0.1640000343322754
 ApplicationDrivenLearning.Solution(29.99998f0, Real[0.6931467f0])
 
-julia> model.forecast(X[1,:])  # previsão final
+julia> model.forecast(X[1,:])  # final forecast
 1-element Vector{Float32}:
  1.999999
 
-julia> ADL.compute_cost(model, X, Y)  # custo final
+julia> ADL.compute_cost(model, X, Y)  # final cost
 29.99998
 ```

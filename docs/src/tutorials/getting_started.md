@@ -16,10 +16,6 @@ using Flux
 import HiGHS
 using ApplicationDrivenLearning
 
-# data
-X = reshape([1 1], (2, 1)) .|> Float32
-Y = reshape([10 20], (2, 1)) .|> Float32
-
 # main model and policy / forecast variables
 model = ApplicationDrivenLearning.Model()
 @variables(model, begin
@@ -52,6 +48,10 @@ end)
 # basic setting
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
+
+# data
+X = reshape([1 1], (2, 1)) .|> Float32
+Y = Dict(θ => [10, 20] .|> Float32)
 
 # forecast model
 nn = Chain(Dense(1 => 1; bias=false))
@@ -87,13 +87,6 @@ using ApplicationDrivenLearning
 We have to include a solver for solving the optimization models. In this case, we load HiGHS:
 ```julia
 using HiGHS
-```
-
-As explained, the data used to train the model is very limited, composed of only two samples of energy demand. Values of one are used as input data, without adding any real additional information to the model. Both `X` and `Y` values are transformed to `Float32` type to match Flux parameters.
-
-```julia
-X = reshape([1 1], (2, 1)) .|> Float32
-Y = reshape([10 20], (2, 1)) .|> Float32
 ```
 
 Just like regular JuMP, ApplicationDrivenLearning has a `Model` function to initialize an empty model. After initializing, we can declare the policy and forecast variables.
@@ -147,6 +140,14 @@ We need to associate the model with an optimizer that can solve the plan and ass
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 ```
+
+As explained, the data used to train the model is very limited, composed of only two samples of energy demand. Values of one are used as input data, without adding any real additional information to the model. `X` is a matrix representing input values and the dictionary `Y` maps the forecast variable `θ` to numerical values to be used. Both `X` and `Y` values are transformed to `Float32` type to match Flux parameters.
+
+```julia
+X = reshape([1 1], (2, 1)) .|> Float32
+Y = Dict(θ => [10, 20] .|> Float32)
+```
+
 
 A simple forecast model with only one parameter can be defined as a `Flux.Dense` layer with just 1 weight and no bias. We can associate the predictive model with our ApplicationDrivenLearning model only if its output size matches the number of declared forecast variables.
 
