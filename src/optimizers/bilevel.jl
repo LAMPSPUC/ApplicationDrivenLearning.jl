@@ -158,7 +158,8 @@ function solve_bilevel(
             i_layer += 1
         end
         for (output_idx, prediction) in layers_inpt
-            y_hat[:, find_elements_position(model.forecast_vars, output_idx)] = prediction
+            y_hat[:, find_elements_position(model.forecast_vars, output_idx)] =
+                prediction
         end
     end
 

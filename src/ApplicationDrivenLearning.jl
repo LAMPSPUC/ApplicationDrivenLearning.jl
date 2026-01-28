@@ -236,11 +236,14 @@ include("optimizers/bilevel.jl")
 
 Transforms dictionary data into ordered-columns matrix
 """
-function dict_to_var_indexed_matrix(data::Dict{<:Forecast,<:Vector}, row_index::Vector{<:Forecast})
+function dict_to_var_indexed_matrix(
+    data::Dict{<:Forecast,<:Vector},
+    row_index::Vector{<:Forecast},
+)
     n = size(data[row_index[1]], 1)
     tp = eltype(data[row_index[1]])
     Y = Matrix{tp}(undef, n, length(row_index))
-    for (i,f) in enumerate(row_index)
+    for (i, f) in enumerate(row_index)
         Y[:, i] = data[f]
     end
     return Y

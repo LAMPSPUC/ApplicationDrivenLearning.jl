@@ -267,7 +267,10 @@ function (model::PredictiveModel)(X::AbstractMatrix)
     for inn = 1:n_networks
         nn = model.networks[inn]
         for (input_idx, output_idx) in model.input_output_map[inn]
-            Yhat[find_elements_position(model.output_variables, output_idx), :] = nn(X[input_idx, :])
+            Yhat[
+                find_elements_position(model.output_variables, output_idx),
+                :,
+            ] = nn(X[input_idx, :])
         end
     end
     return copy(Yhat)
@@ -301,7 +304,8 @@ function (model::PredictiveModel)(x::AbstractVector)
         nn = model.networks[inn]
         for (input_idx, output_idx) in model.input_output_map[inn]
             # set the predicted output for the current output variables indices
-            out_y_idx = find_elements_position(model.output_variables, output_idx)
+            out_y_idx =
+                find_elements_position(model.output_variables, output_idx)
             yhat[out_y_idx] = nn(x[input_idx])
         end
     end
