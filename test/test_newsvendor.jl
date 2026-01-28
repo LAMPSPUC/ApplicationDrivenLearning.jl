@@ -62,6 +62,8 @@ best_cost = (c - q) * y
     sol = ApplicationDrivenLearning.train!(model, X, Y, opt)
     @test sol.params[1] ≈ best_decision atol = 1e-2
     @test sol.cost ≈ best_cost atol = 1e-2
+    @test ApplicationDrivenLearning.compute_cost(model, X, Y) ≈ best_cost atol =
+        1e-2
 end
 
 @testset "Newsvendor NelderMeadMode" begin

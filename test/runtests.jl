@@ -1,4 +1,4 @@
-using .ApplicationDrivenLearning
+using ApplicationDrivenLearning
 using Flux
 using JuMP
 using HiGHS
