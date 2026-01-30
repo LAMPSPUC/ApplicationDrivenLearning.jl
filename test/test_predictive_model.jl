@@ -61,8 +61,14 @@ end
 @testset "Multi-Variate-Dense" begin
     model_in_size = 2
     model_out_size = 1
+
+    adl_model = ApplicationDrivenLearning.Model()
+    @variables(adl_model, begin
+        f[1:out_size], ApplicationDrivenLearning.Forecast
+    end)
+
     nn = Flux.Dense(model_in_size => model_out_size) |> f64
-    in_out_map = Dict([1, 2] => [1], [1, 3] => [2])
+    in_out_map = Dict([1, 2] => [f[1]], [1, 3] => [f[2]])
     forecaster = ApplicationDrivenLearning.PredictiveModel(nn, in_out_map)
     x = ones((in_size, 1))
     @test size(forecaster(x)) == (out_size, 1)
@@ -92,15 +98,17 @@ end
 @testset "Multi-Model-Dense" begin
     model_in_size = 2
     model_out_size = 1
+
+    adl_model = ApplicationDrivenLearning.Model()
+    @variables(adl_model, begin
+        f[1:out_size], ApplicationDrivenLearning.Forecast
+    end)
+
     nn1 = Flux.Dense(model_in_size => model_out_size) |> f64
     nn2 = Flux.Dense(model_in_size => model_out_size) |> f64
-    in_out_map = [Dict([1, 2] => [1]), Dict([1, 3] => [2])]
-    forecaster = ApplicationDrivenLearning.PredictiveModel(
-        [nn1, nn2],
-        in_out_map,
-        in_size,
-        out_size,
-    )
+    in_out_map = [Dict([1, 2] => [f[1]]), Dict([1, 3] => [f[2]])]
+    forecaster =
+        ApplicationDrivenLearning.PredictiveModel([nn1, nn2], in_out_map)
 
     x = ones((in_size, 1))
     @test size(forecaster(x)) == (out_size, 1)

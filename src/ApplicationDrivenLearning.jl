@@ -7,7 +7,6 @@ import ParametricOptInterface as POI
 import Base.*, Base.+
 
 include("flux_utils.jl")
-include("predictive_model.jl")
 
 """
     Policy{T}
@@ -21,6 +20,7 @@ end
 
 +(p1::Policy, p2::Policy) = Policy(p1.plan + p2.plan, p1.assess + p2.assess)
 *(c::Number, p::Policy) = Policy(c * p.plan, c * p.assess)
+*(p::Policy, c::Number) = Policy(c * p.plan, c * p.assess)
 
 """
     Forecast{T}
@@ -36,6 +36,45 @@ function +(p1::Forecast, p2::Forecast)
     return Forecast(p1.plan + p2.plan, p1.assess + p2.assess)
 end
 *(c::Number, p::Forecast) = Forecast(c * p.plan, c * p.assess)
+*(p::Forecast, c::Number) = Forecast(c * p.plan, c * p.assess)
+
+"""
+    Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
+
+Allow accessing `.plan` and `.assess` on arrays of Policy variables.
+Returns an array of the corresponding field values.
+Preserves all other properties by falling back to getfield.
+"""
+function Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
+    if sym === :plan
+        return [x.plan for x in arr]
+    elseif sym === :assess
+        return [x.assess for x in arr]
+    else
+        # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
+        return getfield(arr, sym)
+    end
+end
+
+"""
+    Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
+
+Allow accessing `.plan` and `.assess` on arrays of Forecast variables.
+Returns an array of the corresponding field values.
+Preserves all other properties by falling back to getfield.
+"""
+function Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
+    if sym === :plan
+        return [x.plan for x in arr]
+    elseif sym === :assess
+        return [x.assess for x in arr]
+    else
+        # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
+        return getfield(arr, sym)
+    end
+end
+
+include("predictive_model.jl")
 
 """
     Model <: JuMP.AbstractModel
@@ -115,17 +154,31 @@ function set_forecast_model(
     else
         forecast = PredictiveModel(network)
     end
-    @assert forecast.output_size == size(model.forecast_vars, 1)
+    @assert forecast.output_size == size(model.forecast_vars, 1) "Output size of forecast model must match number of forecast variables"
+
+    # set input_output_map of forecast model if not set
+    if forecast.input_output_map == nothing
+        forecast = PredictiveModel(
+            deepcopy(forecast.networks),
+            [Dict(collect(1:forecast.input_size) => model.forecast_vars)],
+            model.forecast_vars,
+            forecast.input_size,
+            forecast.output_size,
+        )
+    end
+
+    # make sure the same order apply on model.forecast_vars and model.forecast.output_variables
+    if sum(forecast.output_variables .!= model.forecast_vars) > 0
+        forecast = PredictiveModel(
+            forecast.networks,
+            forecast.input_output_map,
+            model.forecast_vars,
+            forecast.input_size,
+            forecast.output_size,
+        )
+    end
+
     return model.forecast = forecast
-end
-
-"""
-    forecast(model, X)
-
-Return forecast model output for given input.
-"""
-function forecast(model::Model, X::AbstractMatrix)
-    return model.forecast(X)
 end
 
 """
@@ -179,6 +232,24 @@ include("optimizers/gradient_mpi.jl")
 include("optimizers/bilevel.jl")
 
 """
+    dict_to_var_indexed_matrix(data::Dict{<:Forecast,<:Vector}, row_index::Vector{<:Forecast})
+
+Transforms dictionary data into ordered-columns matrix
+"""
+function dict_to_var_indexed_matrix(
+    data::Dict{<:Forecast,<:Vector},
+    row_index::Vector{<:Forecast},
+)
+    n = size(data[row_index[1]], 1)
+    tp = eltype(data[row_index[1]])
+    Y = Matrix{tp}(undef, n, length(row_index))
+    for (i, f) in enumerate(row_index)
+        Y[:, i] = data[f]
+    end
+    return Y
+end
+
+"""
     train!(model, X, y, options)
 
 Train model using given data and options.
@@ -186,9 +257,12 @@ Train model using given data and options.
 function train!(
     model::Model,
     X::Matrix{<:Real},
-    y::Matrix{<:Real},
+    Y_dict::Dict{<:Forecast,<:Vector},
     options::Options,
 )
+    # transform dictionary data into ordered matrix
+    y = dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables)
+
     if options.mode == NelderMeadMode
         return train_with_nelder_mead!(model, X, y, options.params)
     elseif options.mode == GradientMode

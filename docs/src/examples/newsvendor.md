@@ -31,7 +31,7 @@ i=2 \longrightarrow c=10; \quad q = 11;\quad r = 1
 
 The demand series for both items will be generated using a discrete uniform distribution.
 
-Let's start by loading the necessary packages and defining the data.
+Let's start by loading the necessary packages and defining the problem parameters.
 
 ```julia
 using Flux
@@ -47,8 +47,6 @@ Random.seed!(123)
 c = [10, 10]
 q = [19, 11]
 r = [9, 1]
-y_d = rand(10:100, (100, 2)) .|> Float32
-x_d = ones(100, 1) .|> Float32
 ```
 
 Now, we can initialize the application driven learning model, build the plan and assess models and set the forecast model.
@@ -91,11 +89,21 @@ pred = Flux.Dense(1 => 2, exp)
 ADL.set_forecast_model(model, pred)
 ```
 
+Then, we can initialize the data, referencing forecast variables.
+
+```julia
+x_d = ones(100, 1) .|> Float32
+y_d = Dict(
+    d[1] => rand(10:100, 100) .|> Float32,
+    d[2] => rand(10:100, 100) .|> Float32
+)
+```
+
 We can check how the model performs by computing the assess cost with the initial (random) forecast model.
 
 ```julia
 julia> ADL.compute_cost(model, x_d, y_d)
--5.118482679128647
+-3.571615f0
 ```
 
 Now let's train the model using the GradientMode.
@@ -109,49 +117,49 @@ julia> gd_sol = ApplicationDrivenLearning.train!(
         epochs=30
     )
 )
-Epoch 1 | Time = 0.5s | Cost = -5.12
-Epoch 2 | Time = 1.0s | Cost = -6.25
-Epoch 3 | Time = 1.5s | Cost = -7.64
-Epoch 4 | Time = 2.1s | Cost = -9.33
-Epoch 5 | Time = 2.6s | Cost = -11.4
-Epoch 6 | Time = 3.1s | Cost = -13.93
-Epoch 7 | Time = 3.6s | Cost = -17.02
-Epoch 8 | Time = 4.1s | Cost = -20.82
-Epoch 9 | Time = 4.7s | Cost = -25.17
-Epoch 10 | Time = 5.2s | Cost = -29.51
-Epoch 11 | Time = 5.7s | Cost = -33.42
-Epoch 12 | Time = 6.3s | Cost = -37.56
-Epoch 13 | Time = 6.8s | Cost = -42.92
-Epoch 14 | Time = 7.5s | Cost = -50.45
-Epoch 15 | Time = 8.2s | Cost = -60.3
-Epoch 16 | Time = 8.9s | Cost = -72.4
-Epoch 17 | Time = 9.5s | Cost = -87.18
-Epoch 18 | Time = 10.2s | Cost = -105.31
-Epoch 19 | Time = 10.8s | Cost = -127.53
-Epoch 20 | Time = 11.4s | Cost = -154.36
-Epoch 21 | Time = 12.1s | Cost = -185.68
-Epoch 22 | Time = 12.8s | Cost = -222.14
-Epoch 23 | Time = 13.4s | Cost = -265.19
-Epoch 24 | Time = 14.0s | Cost = -315.45
-Epoch 25 | Time = 14.5s | Cost = -370.01
-Epoch 26 | Time = 15.1s | Cost = -425.62
-Epoch 27 | Time = 15.7s | Cost = -464.52
-Epoch 28 | Time = 16.3s | Cost = -461.25
-Epoch 29 | Time = 16.9s | Cost = -439.36
-Epoch 30 | Time = 17.5s | Cost = -419.52
-ApplicationDrivenLearning.Solution(-464.5160680770874, Real[1.6317965f0, 1.7067692f0, 2.7623773f0, 0.9124785f0])
+Epoch 1 | Time = 0.4s | Cost = -3.57
+Epoch 2 | Time = 0.8s | Cost = -4.36
+Epoch 3 | Time = 1.2s | Cost = -5.33
+Epoch 4 | Time = 1.6s | Cost = -6.51
+Epoch 5 | Time = 2.0s | Cost = -7.95
+Epoch 6 | Time = 2.4s | Cost = -9.72
+Epoch 7 | Time = 2.8s | Cost = -11.88
+Epoch 8 | Time = 3.2s | Cost = -14.53
+Epoch 9 | Time = 3.6s | Cost = -17.78
+Epoch 10 | Time = 4.0s | Cost = -21.77
+Epoch 11 | Time = 4.4s | Cost = -26.68
+Epoch 12 | Time = 4.8s | Cost = -32.73
+Epoch 13 | Time = 5.2s | Cost = -39.52
+Epoch 14 | Time = 5.6s | Cost = -46.64
+Epoch 15 | Time = 6.0s | Cost = -54.15
+Epoch 16 | Time = 6.4s | Cost = -62.95
+Epoch 17 | Time = 6.8s | Cost = -74.74
+Epoch 18 | Time = 7.2s | Cost = -90.36
+Epoch 19 | Time = 7.6s | Cost = -110.35
+Epoch 20 | Time = 8.0s | Cost = -135.12
+Epoch 21 | Time = 8.4s | Cost = -164.34
+Epoch 22 | Time = 8.8s | Cost = -197.82
+Epoch 23 | Time = 9.2s | Cost = -237.1
+Epoch 24 | Time = 9.6s | Cost = -282.57
+Epoch 25 | Time = 10.0s | Cost = -334.87
+Epoch 26 | Time = 10.4s | Cost = -389.66
+Epoch 27 | Time = 10.8s | Cost = -442.7
+Epoch 28 | Time = 11.2s | Cost = -469.92
+Epoch 29 | Time = 11.6s | Cost = -452.58
+Epoch 30 | Time = 12.0s | Cost = -430.85
+ApplicationDrivenLearning.Solution(-469.91516f0, Real[1.6040976f0, 1.2566354f0, 2.8811285f0, 1.1966338f0])
 
 julia> ADL.compute_cost(model, x_d, y_d)
--464.5160680770874
+-469.91516f0
 ```
 
 After training, we can check the cost of the solution found by the gradient mode and even analyze the predictions from it.
 
 ```julia
 julia> model.forecast(x_d[1,:])
-2-element Vector{Float32}:
- 80.977684
- 13.725394
+2-element ApplicationDrivenLearning.VariableIndexedVector{Float32}:
+ 88.69701
+ 11.626293
 ```
 
 As we can see, the forecast model overestimates the demand for the first item and underestimates the demand for the second item (both items average demand is 55), following the incentives from the model structure.

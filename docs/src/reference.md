@@ -60,7 +60,6 @@ ApplicationDrivenLearning.apply_gradient!
 ## Other functions
 
 ```@docs
-forecast
 compute_cost
 train!
 ApplicationDrivenLearning.build_plan_model_forecast_params
