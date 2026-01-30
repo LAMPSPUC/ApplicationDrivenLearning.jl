@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Minimal Scheduling Problem · ApplicationDrivenLearning.jl documentation</title><meta name="title" content="Minimal Scheduling Problem · ApplicationDrivenLearning.jl documentation"/><meta property="og:title" content="Minimal Scheduling Problem · ApplicationDrivenLearning.jl documentation"/><meta property="twitter:title" content="Minimal Scheduling Problem · ApplicationDrivenLearning.jl documentation"/><meta name="description" content="Documentation for ApplicationDrivenLearning.jl documentation."/><meta property="og:description" content="Documentation for ApplicationDrivenLearning.jl documentation."/><meta property="twitter:description" content="Documentation for ApplicationDrivenLearning.jl documentation."/><script data-outdated-warner src="../../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="../.."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../../assets/documenter.js"></script><script src="../../search_index.js"></script><script src="../../siteinfo.js"></script><script src="../../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../../">ApplicationDrivenLearning.jl documentation</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../../">Home</a></li><li><span class="tocitem">Tutorials</span><ul><li><a class="tocitem" href="../../tutorials/getting_started/">Getting started with ApplicationDrivenLearning</a></li><li><a class="tocitem" href="../../tutorials/modes/">Training modes</a></li><li><a class="tocitem" href="../../tutorials/custom_forecast/">Custom forecast models</a></li></ul></li><li><span class="tocitem">Examples</span><ul><li class="is-active"><a class="tocitem" href>Minimal Scheduling Problem</a></li><li><a class="tocitem" href="../newsvendor/">Newsvendor Problem</a></li></ul></li><li><a class="tocitem" href="../../reference/">API Reference</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li><a class="is-disabled">Examples</a></li><li class="is-active"><a href>Minimal Scheduling Problem</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Minimal Scheduling Problem</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl/blob/main/docs/src/examples/scheduling.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Minimal-Scheduling-Problem"><a class="docs-heading-anchor" href="#Minimal-Scheduling-Problem">Minimal Scheduling Problem</a><a id="Minimal-Scheduling-Problem-1"></a><a class="docs-heading-anchor-permalink" href="#Minimal-Scheduling-Problem" title="Permalink"></a></h1><p>This example shows how to use the ApplicationDrivenLearning.jl package to solve a minimal scheduling problem.</p><p>In this problem, we have to define the dispatch of a single unit, considering it&#39;s operational constraints, costs and the demand. The cost for under-dispatching is 100 and the cost for over-dispatching is 20. The forecast model will be a simple linear model.</p><p>The plan model will only assign the dispatch of the unit equal to the forecast. The assess model will apply a correction to the dispatch, considering the under-dispatching and over-dispatching costs.</p><p>First, let&#39;s load the necessary packages.</p><pre><code class="language-julia hljs">using Flux
+using JuMP
+using Gurobi
+using ApplicationDrivenLearning
+
+ADL = ApplicationDrivenLearning</code></pre><p>Now, we can initialize the application driven learning model, build the plan and assess models and set the forecast model.</p><pre><code class="language-julia hljs"># init application driven learning model
+model = ADL.Model()
+@variable(model, z &gt;= 0, ADL.Policy)
+@variable(model, y, ADL.Forecast)
+
+# plan model
+@constraints(ADL.Plan(model), begin
+    z.plan == y.plan
+end)
+@objective(ADL.Plan(model), Min, 10*z.plan)
+
+# assess model
+@variables(ADL.Assess(model), begin
+    correction
+    under_dispatch &gt;= 0
+    over_dispatch &gt;= 0
+end)
+@constraints(ADL.Assess(model), begin
+    correction == y.assess - z.assess
+    under_dispatch &gt;= correction
+    over_dispatch &gt;= -correction
+end)
+@objective(ADL.Assess(model), Min, 10*y.assess + 100*under_dispatch + 20*over_dispatch)
+
+# forecast model
+predictive = Dense(1 =&gt; 1, exp; bias=false)
+ADL.set_forecast_model(model, predictive)</code></pre><p>We can check how the model performs by computing the assess cost with the initial (random) forecast model.</p><pre><code class="language-julia hljs">X = ones(2, 1) .|&gt; Float32
+Y = Dict(y =&gt; [0.0, 2.0] .|&gt; Float32)
+set_optimizer(model, Gurobi.Optimizer)
+set_silent(model)</code></pre><pre><code class="language-julia hljs">julia&gt; ADL.compute_cost(model, X, Y)
+99.7323203086853</code></pre><p>And finally, we can train the model using the Nelder-Mead mode.</p><pre><code class="language-julia hljs">julia&gt; solution = ADL.train!(
+    model, X, Y,
+    ADL.Options(
+        ADL.NelderMeadMode,
+        iterations=100,
+        show_trace=true
+    )
+)
+Iter     Function value    √(Σ(yᵢ-ȳ)²)/n 
+------   --------------    --------------
+     0     9.973232e+01     2.466946e+00
+ * time: 0.0
+     1     9.973232e+01     3.148899e+01
+ * time: 0.006000041961669922
+     2     3.675434e+01     1.421373e+01
+ * time: 0.014999866485595703
+     3     3.675434e+01     2.673199e+00
+ * time: 0.0279998779296875
+     4     3.140795e+01     6.259584e-01
+ * time: 0.039999961853027344
+     5     3.015603e+01     1.546907e-01
+ * time: 0.04699993133544922
+     6     3.015603e+01     3.849030e-02
+ * time: 0.05299997329711914
+     7     3.007905e+01     3.841400e-02
+ * time: 0.05799984931945801
+     8     3.000222e+01     9.596825e-03
+ * time: 0.06699991226196289
+     9     3.000222e+01     2.398491e-03
+ * time: 0.07599997520446777
+    10     3.000222e+01     5.979546e-04
+ * time: 0.0839998722076416
+    11     3.000103e+01     3.366484e-04
+ * time: 0.08899998664855957
+    12     3.000035e+01     1.144409e-04
+ * time: 0.09500002861022949
+    13     3.000012e+01     3.814697e-05
+ * time: 0.10699987411499023
+    14     3.000005e+01     9.536743e-06
+ * time: 0.11500000953674316
+    15     3.000003e+01     9.536743e-06
+ * time: 0.12199997901916504
+    16     3.000001e+01     9.536743e-06
+ * time: 0.1269998550415039
+    17     2.999999e+01     3.015783e-06
+ * time: 0.13899993896484375
+    18     2.999999e+01     3.015783e-06
+ * time: 0.14399981498718262
+    19     2.999998e+01     1.907349e-06
+ * time: 0.15400004386901855
+    20     2.999998e+01     0.000000e+00
+ * time: 0.1640000343322754
+ApplicationDrivenLearning.Solution(29.99998f0, Real[0.6931467f0])
+
+julia&gt; model.forecast(X[1,:])  # final forecast
+1-element Vector{Float32}:
+ 1.999999
+
+julia&gt; ADL.compute_cost(model, X, Y)  # final cost
+29.99998</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../tutorials/custom_forecast/">« Custom forecast models</a><a class="docs-footer-nextpage" href="../newsvendor/">Newsvendor Problem »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 30 January 2026 01:19">Friday 30 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
