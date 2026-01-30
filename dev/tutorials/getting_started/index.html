@@ -4,10 +4,6 @@ using Flux
 import HiGHS
 using ApplicationDrivenLearning
 
-# data
-X = reshape([1 1], (2, 1)) .|&gt; Float32
-Y = reshape([10 20], (2, 1)) .|&gt; Float32
-
 # main model and policy / forecast variables
 model = ApplicationDrivenLearning.Model()
 @variables(model, begin
@@ -41,6 +37,10 @@ end)
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 
+# data
+X = reshape([1 1], (2, 1)) .|&gt; Float32
+Y = Dict(θ =&gt; [10, 20] .|&gt; Float32)
+
 # forecast model
 nn = Chain(Dense(1 =&gt; 1; bias=false))
 ApplicationDrivenLearning.set_forecast_model(model, nn)
@@ -61,8 +61,7 @@ pred = model.forecast(X&#39;)
 # extracting solution
 println(solution.params)</code></pre><h2 id="Step-by-step"><a class="docs-heading-anchor" href="#Step-by-step">Step-by-step</a><a id="Step-by-step-1"></a><a class="docs-heading-anchor-permalink" href="#Step-by-step" title="Permalink"></a></h2><p>Once installed, the necessary packages can be loaded into julia:</p><pre><code class="language-julia hljs">using JuMP
 using Flux
-using ApplicationDrivenLearning</code></pre><p>We have to include a solver for solving the optimization models. In this case, we load HiGHS:</p><pre><code class="language-julia hljs">using HiGHS</code></pre><p>As explained, the data used to train the model is very limited, composed of only two samples of energy demand. Values of one are used as input data, without adding any real additional information to the model. Both <code>X</code> and <code>Y</code> values are transformed to <code>Float32</code> type to match Flux parameters.</p><pre><code class="language-julia hljs">X = reshape([1 1], (2, 1)) .|&gt; Float32
-Y = reshape([10 20], (2, 1)) .|&gt; Float32</code></pre><p>Just like regular JuMP, ApplicationDrivenLearning has a <code>Model</code> function to initialize an empty model. After initializing, we can declare the policy and forecast variables.</p><ul><li>Policy variables represent decision variables that should be maintained from the <code>Plan</code> to the <code>Assess</code> model.</li><li>Forecast variables represent future values relevant to the problem. They are replaced by forecast output values in the planning step and fixed as realized values (from the <code>Y</code> matrix) in the assessment step.</li></ul><p>For our problem, the policy variable <code>z</code> represents the generation and forecast variable <code>θ</code> represents the demand.</p><pre><code class="language-julia hljs">model = ApplicationDrivenLearning.Model()
+using ApplicationDrivenLearning</code></pre><p>We have to include a solver for solving the optimization models. In this case, we load HiGHS:</p><pre><code class="language-julia hljs">using HiGHS</code></pre><p>Just like regular JuMP, ApplicationDrivenLearning has a <code>Model</code> function to initialize an empty model. After initializing, we can declare the policy and forecast variables.</p><ul><li>Policy variables represent decision variables that should be maintained from the <code>Plan</code> to the <code>Assess</code> model.</li><li>Forecast variables represent future values relevant to the problem. They are replaced by forecast output values in the planning step and fixed as realized values (from the <code>Y</code> matrix) in the assessment step.</li></ul><p>For our problem, the policy variable <code>z</code> represents the generation and forecast variable <code>θ</code> represents the demand.</p><pre><code class="language-julia hljs">model = ApplicationDrivenLearning.Model()
 @variables(model, begin
     z, ApplicationDrivenLearning.Policy
     θ, ApplicationDrivenLearning.Forecast
@@ -83,7 +82,8 @@ end)
     c4 ≥ 20 * (z.assess-θ.assess)
 end)
 @objective(ApplicationDrivenLearning.Assess(model), Min, 10*z.assess + c3 + c4)</code></pre><p>We need to associate the model with an optimizer that can solve the plan and assess models. For this case, we use the HiGHS optimizer. We also set the model to silent mode to avoid excessive outputs from the solve iterations.</p><pre><code class="language-julia hljs">set_optimizer(model, HiGHS.Optimizer)
-set_silent(model)</code></pre><p>A simple forecast model with only one parameter can be defined as a <code>Flux.Dense</code> layer with just 1 weight and no bias. We can associate the predictive model with our ApplicationDrivenLearning model only if its output size matches the number of declared forecast variables.</p><pre><code class="language-julia hljs">nn = Chain(Dense(1 =&gt; 1; bias=false))
+set_silent(model)</code></pre><p>As explained, the data used to train the model is very limited, composed of only two samples of energy demand. Values of one are used as input data, without adding any real additional information to the model. <code>X</code> is a matrix representing input values and the dictionary <code>Y</code> maps the forecast variable <code>θ</code> to numerical values to be used. Both <code>X</code> and <code>Y</code> values are transformed to <code>Float32</code> type to match Flux parameters.</p><pre><code class="language-julia hljs">X = reshape([1 1], (2, 1)) .|&gt; Float32
+Y = Dict(θ =&gt; [10, 20] .|&gt; Float32)</code></pre><p>A simple forecast model with only one parameter can be defined as a <code>Flux.Dense</code> layer with just 1 weight and no bias. We can associate the predictive model with our ApplicationDrivenLearning model only if its output size matches the number of declared forecast variables.</p><pre><code class="language-julia hljs">nn = Chain(Dense(1 =&gt; 1; bias=false))
 ApplicationDrivenLearning.set_forecast_model(model, nn)</code></pre><p>Finally, the full model is trained using the <code>NelderMeadMode</code>. For using this mode, it is necessary to install the <code>Optim</code> package previously, but it doesn&#39;t need to be installed.</p><pre><code class="language-julia hljs">solution = ApplicationDrivenLearning.train!(
     model,
     X,
@@ -98,4 +98,4 @@ ApplicationDrivenLearning.set_forecast_model(model, nn)</code></pre><p>Finally, 
  400.0
  200.0</code></pre><p>And also extract the parameters from the trained model:</p><pre><code class="language-julia hljs">julia&gt; solution.params
 1-element Vector{Real}:
- 20.0f0</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../modes/">Training modes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 6 August 2025 03:50">Wednesday 6 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+ 20.0f0</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../">« Home</a><a class="docs-footer-nextpage" href="../modes/">Training modes »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 30 January 2026 01:29">Friday 30 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>

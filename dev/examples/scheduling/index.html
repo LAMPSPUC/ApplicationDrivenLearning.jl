@@ -31,8 +31,7 @@ end)
 # forecast model
 predictive = Dense(1 =&gt; 1, exp; bias=false)
 ADL.set_forecast_model(model, predictive)</code></pre><p>We can check how the model performs by computing the assess cost with the initial (random) forecast model.</p><pre><code class="language-julia hljs">X = ones(2, 1) .|&gt; Float32
-Y = zeros(2, 1) .|&gt; Float32
-Y[2, 1] = 2.0
+Y = Dict(y =&gt; [0.0, 2.0] .|&gt; Float32)
 set_optimizer(model, Gurobi.Optimizer)
 set_silent(model)</code></pre><pre><code class="language-julia hljs">julia&gt; ADL.compute_cost(model, X, Y)
 99.7323203086853</code></pre><p>And finally, we can train the model using the Nelder-Mead mode.</p><pre><code class="language-julia hljs">julia&gt; solution = ADL.train!(
@@ -89,9 +88,9 @@ Iter     Function value    √(Σ(yᵢ-ȳ)²)/n
  * time: 0.1640000343322754
 ApplicationDrivenLearning.Solution(29.99998f0, Real[0.6931467f0])
 
-julia&gt; model.forecast(X[1,:])  # previsão final
+julia&gt; model.forecast(X[1,:])  # final forecast
 1-element Vector{Float32}:
  1.999999
 
-julia&gt; ADL.compute_cost(model, X, Y)  # custo final
-29.99998</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../tutorials/custom_forecast/">« Custom forecast models</a><a class="docs-footer-nextpage" href="../newsvendor/">Newsvendor Problem »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.14.1 on <span class="colophon-date" title="Wednesday 6 August 2025 03:50">Wednesday 6 August 2025</span>. Using Julia version 1.11.6.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+julia&gt; ADL.compute_cost(model, X, Y)  # final cost
+29.99998</code></pre></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../../tutorials/custom_forecast/">« Custom forecast models</a><a class="docs-footer-nextpage" href="../newsvendor/">Newsvendor Problem »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Friday 30 January 2026 01:29">Friday 30 January 2026</span>. Using Julia version 1.12.4.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
