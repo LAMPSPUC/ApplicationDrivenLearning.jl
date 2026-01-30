@@ -66,7 +66,7 @@ end
 """
     compute_cost(model, X, Y, with_gradients=false)
 
-Compute the cost function (C) based on the model predictions and the true values.
+Compute the cost function (C) based on the model predictions and the true values matrix.
 
 ...
 
@@ -129,4 +129,21 @@ function compute_cost(
         return C, dC
     end
     return C
+end
+
+# compute_cost with dictionary structured real data argument
+function compute_cost(
+    model::Model,
+    X::Matrix{<:Real},
+    Y_dict::Dict{<:Forecast,<:Vector},
+    with_gradients::Bool = false,
+    aggregate::Bool = true,
+)
+    return compute_cost(
+        model,
+        X,
+        dict_to_var_indexed_matrix(Y_dict, model.forecast_vars),
+        with_gradients,
+        aggregate,
+    )
 end

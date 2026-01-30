@@ -1,6 +1,4 @@
 # basic model for testing gradient mode
-X = Float32.(ones(1, 1))
-Y = Float32.(ones(1, 1))
 model = ApplicationDrivenLearning.Model()
 @variables(model, begin
     x >= 0, ApplicationDrivenLearning.Policy
@@ -11,6 +9,8 @@ end)
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 ApplicationDrivenLearning.set_forecast_model(model, Chain(Dense(1 => 1)))
+X = Float32.(ones(1, 1))
+Y = Dict(d => Float32.(ones(1)))
 
 @testset "GradientMode Stop Rules" begin
     # epochs

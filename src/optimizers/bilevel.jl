@@ -122,7 +122,7 @@ function solve_bilevel(
     predictive_model_vars = [Dict{Int,Any}() for ipred = 1:npreds]
     y_hat = Matrix{Any}(undef, size(Y, 1), size(Y, 2))
     for ipred = 1:npreds
-        layers_inpt = Dict{Any,Any}(
+        layers_inpt = Dict{Vector{Forecast},Matrix{Any}}(
             output_idx => X[1:T, input_idx] for (input_idx, output_idx) in
             model.forecast.input_output_map[ipred]
         )
@@ -158,14 +158,15 @@ function solve_bilevel(
             i_layer += 1
         end
         for (output_idx, prediction) in layers_inpt
-            y_hat[:, output_idx] = prediction
+            y_hat[:, find_elements_position(model.forecast_vars, output_idx)] =
+                prediction
         end
     end
 
     # and apply prediction on lower model as constraint
     ipred_var_count = 1
-    for pred_var in plan_forecast_vars(model)
-        low_pred_var = low_var_map[pred_var]
+    for pred_var in model.forecast_vars
+        low_pred_var = low_var_map[pred_var.plan]
         @constraint(
             Lower(bilevel_model),
             low_pred_var .- y_hat[:, ipred_var_count] .== 0
