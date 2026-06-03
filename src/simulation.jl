@@ -75,7 +75,11 @@ Compute the cost function (C) based on the model predictions and the true values
   - `model::ApplicationDrivenLearning.Model`: model to evaluate.
   - `X::Matrix{<:Real}`: input data.
   - `Y::Matrix{<:Real}`: true values.
-  - `with_gradients::Bool=false`: flag to compute and return gradients.
+  - `with_gradients::Bool=false`: flag to compute and return the cost gradients
+    with respect to the forecasts. When set, the second returned value is the
+    per-sample gradient matrix of size `(T, output_size)`.
+  - `aggregate::Bool=true`: when true, the returned cost is averaged over the `T`
+    samples. Only affects the cost; gradients are always per-sample.
     ...
 """
 function compute_cost(
@@ -122,7 +126,6 @@ function compute_cost(
     # aggregate cost if requested
     if aggregate
         C = sum(C) / T
-        dC = sum(dC, dims = 1)[1, :] / T
     end
 
     if with_gradients

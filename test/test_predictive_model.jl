@@ -22,7 +22,7 @@ out_size = 2
 
     ApplicationDrivenLearning.apply_gradient!(
         forecaster,
-        ones(out_size),
+        ones((1, out_size)),
         ones((1, in_size)),
         Flux.setup(Flux.Descent(0.1), forecaster),
     )
@@ -50,7 +50,7 @@ end
 
     ApplicationDrivenLearning.apply_gradient!(
         forecaster,
-        ones(out_size),
+        ones((1, out_size)),
         ones((1, in_size)),
         Flux.setup(Flux.Descent(0.1), forecaster),
     )
@@ -86,7 +86,7 @@ end
 
     ApplicationDrivenLearning.apply_gradient!(
         forecaster,
-        ones(out_size),
+        ones((1, out_size)),
         ones((1, in_size)),
         Flux.setup(Flux.Descent(0.1), forecaster),
     )
@@ -126,7 +126,7 @@ end
 
     ApplicationDrivenLearning.apply_gradient!(
         forecaster,
-        ones(out_size),
+        ones((1, out_size)),
         ones((1, in_size)),
         Flux.setup(Flux.Descent(0.1), forecaster),
     )

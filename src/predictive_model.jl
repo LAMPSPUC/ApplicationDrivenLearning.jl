@@ -331,27 +331,34 @@ function apply_params(model::PredictiveModel, θ)
 end
 
 """
-    apply_gradient!(model, dCdy, X, rule)
+    apply_gradient!(model, dCdy, X, opt_state)
 
-Apply a gradient vector to the model parameters.
+Apply per-sample cost gradients to the model parameters.
+
+The optimization layer provides `dCdy`, the gradient of the assessment cost with
+respect to the forecasts, for each sample. Because the optimization step itself
+is not differentiable by the AD backend, these gradients are propagated through
+the forecast model with a linear surrogate loss whose parameter-gradient equals
+the chain-rule term `(1/T) Σₜ (dC/dŷₜ)·(dŷₜ/dθ)`.
 
 ...
 
 # Arguments
 
   - `model::PredictiveModel`: model to be updated.
-  - `dCdy::Vector{<:Real}`: gradient vector.
-  - `X::Matrix{<:Real}`: input data.
-  - `rule`: Optimisation rule.
+  - `dCdy::AbstractMatrix{<:Real}`: per-sample cost gradients, size
+    `(T, output_size)`, with row `t` aligned to sample `t` (row `t` of `X`).
+  - `X::Matrix{<:Real}`: input data, size `(T, input_size)`.
+  - `opt_state`: Optimisers optimisation state.
     ...
 """
 function apply_gradient!(
     model::PredictiveModel,
-    dCdy::AbstractVector{<:Real},
+    dCdy::AbstractMatrix{<:Real},
     X::Matrix{<:Real},
     opt_state,
 )
-    loss3(m, X) = mean(dCdy'm(X'))
+    loss3(m, X) = sum(dCdy' .* m(X')) / size(X, 1)
     grad = Zygote.gradient(loss3, model, X)[1]
     return Optimisers.update!(opt_state, model, grad)
 end

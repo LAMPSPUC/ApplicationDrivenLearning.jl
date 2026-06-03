@@ -75,8 +75,8 @@ function train_with_gradient_mpi!(
                     (v) -> compute_cost_and_gradients(v[1], v[2], true),
                     [[curr_θ, i] for i in batches[epoch, :]],
                 )
-                dCdy =
-                    sum([r[2] for r in pmap_result_with_gradients]) ./ batch_size
+                # stack per-sample gradients into rows aligned with `epochx`
+                dC = reduce(vcat, [r[2]' for r in pmap_result_with_gradients])
 
                 if compute_full_cost
                     # broadcast `is_done = false` again
@@ -100,7 +100,8 @@ function train_with_gradient_mpi!(
                     [[curr_θ, i] for i = 1:T],
                 )
                 curr_C = sum([r[1] for r in pmap_result]) ./ T
-                dCdy = sum([r[2] for r in pmap_result]) ./ T
+                # stack per-sample gradients into rows aligned with `epochx`
+                dC = reduce(vcat, [r[2]' for r in pmap_result])
             end
 
             if compute_full_cost
@@ -129,7 +130,7 @@ function train_with_gradient_mpi!(
             end
 
             # check gradient tolerance
-            if maximum(abs.(dCdy)) < g_tol
+            if maximum(abs.(dC)) < g_tol
                 if verbose
                     println("Gradient tolerance reached.")
                 end
@@ -137,7 +138,7 @@ function train_with_gradient_mpi!(
             end
 
             # take gradient step (if not last epoch)
-            apply_gradient!(model.forecast, dCdy, epochx, opt_state)
+            apply_gradient!(model.forecast, dC, epochx, opt_state)
         end
 
         # release workers
