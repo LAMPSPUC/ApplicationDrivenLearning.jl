@@ -223,7 +223,7 @@ rules from Flux.jl.
 after a specified number of epochs. This enables faster iterations with the drawback of
 possibly missing sets of parameters with low associated cost.
 - `time_limit`: The time limit for the gradient algorithm in seconds.
-- `g_tol`: Convergence condition on the infinite norm of the gradient vector. Below, we illustrate the use of NelderMeadMode to optimize the predictive model used in the ongoing example.
+- `g_tol`: Convergence condition on the infinity norm of the per-sample cost gradients with respect to the forecasts (the maximum absolute entry over all samples and outputs). Below, we illustrate the use of NelderMeadMode to optimize the predictive model used in the ongoing example.
 
 ### Example
 
