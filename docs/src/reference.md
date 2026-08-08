@@ -65,4 +65,20 @@ train!
 ApplicationDrivenLearning.build_plan_model_forecast_params
 ApplicationDrivenLearning.build_assess_model_policy_constraint
 ApplicationDrivenLearning.build
+ApplicationDrivenLearning.dict_to_var_indexed_matrix
+ApplicationDrivenLearning.compute_single_step_cost
+ApplicationDrivenLearning.compute_single_step_gradient
+```
+
+## Training algorithms
+
+These are called by [`train!`](@ref) according to the selected mode and are
+not meant to be called directly.
+
+```@docs
+ApplicationDrivenLearning.train_with_nelder_mead!
+ApplicationDrivenLearning.train_with_gradient!
+ApplicationDrivenLearning.train_with_nelder_mead_mpi!
+ApplicationDrivenLearning.train_with_gradient_mpi!
+ApplicationDrivenLearning.solve_bilevel
 ```

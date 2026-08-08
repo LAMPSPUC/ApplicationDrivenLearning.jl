@@ -2,6 +2,19 @@ using JuMP
 using Flux
 using BilevelJuMP
 
+"""
+    solve_bilevel(model, X, Y, params)
+
+Train the predictive model by building and solving the equivalent bilevel
+optimization problem with BilevelJuMP.jl.
+
+The plan model, replicated once per sample, becomes the lower level; the
+assess model and the predictive model parameters become the upper level. Only
+linear plan/assess models and linear (identity-activation) predictive models
+are supported.
+
+See [`BilevelMode`](@ref) for the accepted `params`.
+"""
 function solve_bilevel(
     model::Model,
     X::Matrix{<:Real},
@@ -80,11 +93,18 @@ function solve_bilevel(
     end
 
     # upper model base constraints
+    # the policy-fixing constraints added by `build` are replaced here by the
+    # link to the lower level, so they must be skipped. They live in a JuMP
+    # container, so their names carry an index suffix (`assess_policy_fix[1]`).
+    policy_fix_cons = Set(
+        haskey(model.assess, :assess_policy_fix) ?
+        vec(collect(model.assess[:assess_policy_fix])) : [],
+    )
     for post_con in JuMP.all_constraints(
         model.assess,
         include_variable_in_set_constraints = false,
     )
-        if name(post_con) != "assess_policy_fix"
+        if !(post_con in policy_fix_cons)
             post_con_func = JuMP.constraint_object(post_con).func
             lhs = [value(x -> up_var_map[x][t], post_con_func) for t = 1:T]
             @constraint(
@@ -153,7 +173,7 @@ function solve_bilevel(
                     layers_inpt[output_idx] = layer(layers_inpt[output_idx])
                 end
             else
-                println("Network $ipred layer $ilayer type not supported")
+                println("Network $ipred layer $i_layer type not supported")
             end
             i_layer += 1
         end

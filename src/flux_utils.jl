@@ -3,10 +3,10 @@ using Flux
 """
     extract_flux_params(model)
 
-Extract the parameters of a Flux model (Flux.Chain or Flux.Dense) into a single
-vector.
+Extract the trainable parameters of any Flux model or layer into a single
+flat vector, in `Flux.trainables` order.
 """
-function extract_flux_params(model::Union{Flux.Chain,Flux.Dense})
+function extract_flux_params(model)
     θ = Flux.trainables(model)
     return reduce(vcat, [vec(p) for p in θ])
 end
@@ -14,12 +14,11 @@ end
 """
     fix_flux_params_single_model(model, θ)
 
-Return model after fixing the parameters from an adequate vector of parameters.
+Return the model after overwriting its trainable parameters in place with the
+values of `θ`, which must be laid out as produced by
+[`extract_flux_params`](@ref).
 """
-function fix_flux_params_single_model(
-    model::Union{Flux.Chain,Flux.Dense},
-    θ::Vector{<:Real},
-)
+function fix_flux_params_single_model(model, θ::Vector{<:Real})
     i = 1
     for p in Flux.trainables(model)
         psize = prod(size(p))
@@ -32,8 +31,9 @@ end
 """
     fix_flux_params_multi_model(models, θ)
 
-Return iterable of models after fixing the parameters from an adequate vector
-of parameters.
+Return the iterable of models after overwriting their trainable parameters in
+place with the values of `θ`, concatenated in model order as produced by
+[`extract_params`](@ref ApplicationDrivenLearning.extract_params).
 """
 function fix_flux_params_multi_model(models, θ::Vector{<:Real})
     i = 1

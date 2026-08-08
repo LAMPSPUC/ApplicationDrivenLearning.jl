@@ -1,3 +1,15 @@
+"""
+    compute_single_step_cost(model::Model, y::Vector{<:Real}, yhat::Vector{<:Real})
+
+Evaluate the assessed cost of a single sample.
+
+The prediction `yhat` is written into the plan model's forecast parameters and
+the plan model is solved; the resulting policy is then fixed in the assess
+model, whose forecast variables are fixed to the realized values `y`. The
+optimal objective of the assess model is returned.
+
+Requires [`build`](@ref) to have been called on `model`.
+"""
 function compute_single_step_cost(
     model::Model,
     y::Vector{<:Real},
@@ -28,12 +40,22 @@ function compute_single_step_cost(
         println("Optimization failed for ASSESS model")
         throw(e)
     end
-    # should never get here
-    return 0
 end
 
 """
-Computes the gradient of the cost function (C) with respect to the predictions (̂y).
+    compute_single_step_gradient(model::Model, dCdz::Vector{<:Real}, dCdy::Vector{<:Real})
+
+Compute the gradient of the assessed cost `C` with respect to the predictions
+`ŷ` for the sample most recently evaluated by
+[`compute_single_step_cost`](@ref).
+
+The duals of the `assess_policy_fix` constraint give `dC/dz`, the sensitivity
+with respect to the policy; DiffOpt then propagates them backwards through the
+plan model to the forecast parameters.
+
+Both `dCdz` and `dCdy` are overwritten in place and `dCdy` is returned. Note
+that the returned vector aliases the `dCdy` argument, so callers that keep the
+result across several samples must copy it.
 """
 function compute_single_step_gradient(
     model::Model,
@@ -42,11 +64,12 @@ function compute_single_step_gradient(
 )
     dCdz .= dual.(model.assess[:assess_policy_fix])
     DiffOpt.empty_input_sensitivities!(model.plan)
-    for i = 1:size(model.policy_vars, 1)
+    policy_vars = plan_policy_vars(model)
+    for i in eachindex(policy_vars)
         MOI.set(
             model.plan,
             DiffOpt.ReverseVariablePrimal(),
-            plan_policy_vars(model)[i],
+            policy_vars[i],
             dCdz[i],
         )
     end
@@ -89,8 +112,16 @@ function compute_cost(
     with_gradients::Bool = false,
     aggregate::Bool = true,
 )
+    if isnothing(model.forecast)
+        throw(
+            ArgumentError(
+                "No forecast model set. Call set_forecast_model first.",
+            ),
+        )
+    end
 
     # data size assertions
+    @assert size(X)[1] == size(Y)[1] "X and Y must have the same number of samples"
     @assert size(X)[2] == model.forecast.input_size "Input size mismatch"
     @assert size(Y)[2] == model.forecast.output_size "Output size mismatch"
 
@@ -101,8 +132,11 @@ function compute_cost(
     T = size(Y)[1]
     C = zeros(T)
     dC = zeros((T, model.forecast.output_size))
-    dCdz = Vector{Float32}(undef, size(model.policy_vars, 1))
-    dCdy = Vector{Float32}(undef, model.forecast.output_size)
+    # solver duals and DiffOpt sensitivities are Float64, so the gradient
+    # buffers must be too - narrowing them here would silently round the
+    # gradients to single precision
+    dCdz = Vector{Float64}(undef, length(model.policy_vars))
+    dCdy = Vector{Float64}(undef, model.forecast.output_size)
 
     function _compute_step(y, yhat)
         c = compute_single_step_cost(model, y, yhat)
@@ -134,7 +168,13 @@ function compute_cost(
     return C
 end
 
-# compute_cost with dictionary structured real data argument
+"""
+    compute_cost(model, X, Y_dict, with_gradients=false, aggregate=true)
+
+Variant of [`compute_cost`](@ref) that takes the realized values as a
+dictionary mapping each [`Forecast`](@ref) variable to its series, instead of
+a matrix. The columns are ordered to match the predictive model output.
+"""
 function compute_cost(
     model::Model,
     X::Matrix{<:Real},
@@ -145,7 +185,7 @@ function compute_cost(
     return compute_cost(
         model,
         X,
-        dict_to_var_indexed_matrix(Y_dict, model.forecast_vars),
+        dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
         with_gradients,
         aggregate,
     )
