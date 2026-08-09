@@ -4,16 +4,16 @@ using MPI
 import JobQueueMPI as JQM
 
 """
-    train_with_gradient_mpi!(model, X, Y, params)
+    _train_with_gradient_mpi!(model, X, Y, params)
 
-MPI counterpart of [`train_with_gradient!`](@ref): the controller process runs
+MPI counterpart of `_train_with_gradient!`: the controller process runs
 the optimiser while the per-sample cost and gradient evaluations are
 distributed over the worker processes with JobQueueMPI.jl.
 
 Only the controller returns a meaningful [`Solution`](@ref). See
 [`GradientMPIMode`](@ref) for the accepted `params`.
 """
-function train_with_gradient_mpi!(
+function _train_with_gradient_mpi!(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
@@ -53,11 +53,11 @@ function train_with_gradient_mpi!(
     function compute_cost_and_gradients(θ, i, compute_gradient::Bool)
         apply_params(model.forecast, θ)
         yhat = model.forecast(X[i, :])
-        step_cost = compute_single_step_cost(model, Y[i, :], yhat)
+        step_cost = _compute_single_step_cost(model, Y[i, :], yhat)
         if compute_gradient
-            # `compute_single_step_gradient` returns the shared `dCdy` buffer,
+            # `_compute_single_step_gradient` returns the shared `dCdy` buffer,
             # so it must be copied before being handed back to the caller
-            step_grad = copy(compute_single_step_gradient(model, dCdz, dCdy))
+            step_grad = copy(_compute_single_step_gradient(model, dCdz, dCdy))
         else
             step_grad = nothing
         end

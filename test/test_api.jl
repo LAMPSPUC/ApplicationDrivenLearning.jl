@@ -54,24 +54,24 @@ end
 
 @testset "flux_utils" begin
     dense = Flux.Dense(2 => 1) |> f64
-    θ = ADL.extract_flux_params(dense)
+    θ = ADL._extract_flux_params(dense)
     @test length(θ) == 3
 
-    ADL.fix_flux_params_single_model(dense, [1.0, 2.0, 3.0])
+    ADL._fix_flux_params_single_model(dense, [1.0, 2.0, 3.0])
     @test dense.weight == [1.0 2.0]
     @test dense.bias == [3.0]
 
-    @test ADL.has_params(dense)
-    @test ADL.has_params(Flux.Chain(Flux.Dense(2 => 1)))
-    @test !ADL.has_params(Flux.relu)
-    @test !ADL.has_params(identity)
+    @test ADL._has_params(dense)
+    @test ADL._has_params(Flux.Chain(Flux.Dense(2 => 1)))
+    @test !ADL._has_params(Flux.relu)
+    @test !ADL._has_params(identity)
 
     # the helpers must work on any Flux layer, not just Dense and Chain
     scale = Flux.Scale(2) |> f64
-    @test ADL.has_params(scale)
-    @test length(ADL.extract_flux_params(scale)) == 4
-    ADL.fix_flux_params_single_model(scale, [2.0, 3.0, 4.0, 5.0])
-    @test ADL.extract_flux_params(scale) == [2.0, 3.0, 4.0, 5.0]
+    @test ADL._has_params(scale)
+    @test length(ADL._extract_flux_params(scale)) == 4
+    ADL._fix_flux_params_single_model(scale, [2.0, 3.0, 4.0, 5.0])
+    @test ADL._extract_flux_params(scale) == [2.0, 3.0, 4.0, 5.0]
     @test scale([1.0, 1.0]) ≈ [2.0 + 4.0, 3.0 + 5.0]
 end
 
@@ -277,8 +277,8 @@ end
 end
 
 @testset "BilevelMode after compute_cost has built the model" begin
-    # `build` adds the `assess_policy_fix` constraints to the assess model.
-    # `solve_bilevel` must skip them when copying the assess constraints into
+    # `_build` adds the `assess_policy_fix` constraints to the assess model.
+    # `_solve_bilevel` must skip them when copying the assess constraints into
     # the upper level, otherwise the policy is pinned to zero.
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
@@ -368,16 +368,16 @@ end
     @test occursin("Plan Model:", String(take!(io)))
 end
 
-@testset "dict_to_var_indexed_matrix" begin
+@testset "_dict_to_var_indexed_matrix" begin
     m = ADL.Model()
     @variable(m, f[1:2], ADL.Forecast)
     data = Dict(f[1] => [1.0, 2.0], f[2] => [3.0, 4.0])
-    @test ADL.dict_to_var_indexed_matrix(data, [f[1], f[2]]) ==
+    @test ADL._dict_to_var_indexed_matrix(data, [f[1], f[2]]) ==
           [1.0 3.0; 2.0 4.0]
     # column order follows row_index, not insertion order
-    @test ADL.dict_to_var_indexed_matrix(data, [f[2], f[1]]) ==
+    @test ADL._dict_to_var_indexed_matrix(data, [f[2], f[1]]) ==
           [3.0 1.0; 4.0 2.0]
-    @test_throws AssertionError ADL.dict_to_var_indexed_matrix(
+    @test_throws AssertionError ADL._dict_to_var_indexed_matrix(
         Dict(f[1] => [1.0, 2.0], f[2] => [3.0]),
         [f[1], f[2]],
     )

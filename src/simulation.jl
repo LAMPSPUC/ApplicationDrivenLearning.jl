@@ -1,5 +1,5 @@
 """
-    compute_single_step_cost(model::Model, y::Vector{<:Real}, yhat::Vector{<:Real})
+    _compute_single_step_cost(model::Model, y::Vector{<:Real}, yhat::Vector{<:Real})
 
 Evaluate the assessed cost of a single sample.
 
@@ -8,9 +8,9 @@ the plan model is solved; the resulting policy is then fixed in the assess
 model, whose forecast variables are fixed to the realized values `y`. The
 optimal objective of the assess model is returned.
 
-Requires [`build`](@ref) to have been called on `model`.
+Requires `_build` to have been called on `model`.
 """
-function compute_single_step_cost(
+function _compute_single_step_cost(
     model::Model,
     y::Vector{<:Real},
     yhat::Vector{<:Real},
@@ -43,11 +43,11 @@ function compute_single_step_cost(
 end
 
 """
-    compute_single_step_gradient(model::Model, dCdz::Vector{<:Real}, dCdy::Vector{<:Real})
+    _compute_single_step_gradient(model::Model, dCdz::Vector{<:Real}, dCdy::Vector{<:Real})
 
 Compute the gradient of the assessed cost `C` with respect to the predictions
 `ŷ` for the sample most recently evaluated by
-[`compute_single_step_cost`](@ref).
+`_compute_single_step_cost`.
 
 The duals of the `assess_policy_fix` constraint give `dC/dz`, the sensitivity
 with respect to the policy; DiffOpt then propagates them backwards through the
@@ -57,7 +57,7 @@ Both `dCdz` and `dCdy` are overwritten in place and `dCdy` is returned. Note
 that the returned vector aliases the `dCdy` argument, so callers that keep the
 result across several samples must copy it.
 """
-function compute_single_step_gradient(
+function _compute_single_step_gradient(
     model::Model,
     dCdz::Vector{<:Real},
     dCdy::Vector{<:Real},
@@ -126,7 +126,7 @@ function compute_cost(
     @assert size(Y)[2] == model.forecast.output_size "Output size mismatch"
 
     # build model variables if necessary
-    build(model)
+    _build(model)
 
     # init parameters
     T = size(Y)[1]
@@ -139,9 +139,9 @@ function compute_cost(
     dCdy = Vector{Float64}(undef, model.forecast.output_size)
 
     function _compute_step(y, yhat)
-        c = compute_single_step_cost(model, y, yhat)
+        c = _compute_single_step_cost(model, y, yhat)
         if with_gradients
-            dc = compute_single_step_gradient(model, dCdz, dCdy)
+            dc = _compute_single_step_gradient(model, dCdz, dCdy)
             return c, dc
         end
         return c, 0
@@ -185,7 +185,7 @@ function compute_cost(
     return compute_cost(
         model,
         X,
-        dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
+        _dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
         with_gradients,
         aggregate,
     )

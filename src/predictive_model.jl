@@ -5,11 +5,11 @@ import Functors
 import Optimisers
 
 """
-    get_ordered_output_variables(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
+    _get_ordered_output_variables(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
 
 Get the ordered output variables from the input-output map.
 """
-function get_ordered_output_variables(
+function _get_ordered_output_variables(
     input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
 )
     return reduce(
@@ -19,11 +19,11 @@ function get_ordered_output_variables(
 end
 
 """
-    get_input_indices(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
+    _get_input_indices(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
 
 Get the input indices from the input-output map.
 """
-function get_input_indices(
+function _get_input_indices(
     input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
 )
     return unique(
@@ -32,14 +32,14 @@ function get_input_indices(
 end
 
 """
-    get_max_input_index(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
+    _get_max_input_index(input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}})
 
 Get the maximum input index from the input-output maps.
 """
-function get_max_input_index(
+function _get_max_input_index(
     input_output_map::Vector{<:Dict{Vector{Int},<:Vector{<:Forecast}}},
 )
-    return maximum(get_input_indices(input_output_map))
+    return maximum(_get_input_indices(input_output_map))
 end
 
 """
@@ -132,8 +132,8 @@ function PredictiveModel(
         Nothing,
     },
 )
-    output_variables = get_ordered_output_variables(input_output_map)
-    input_size = get_max_input_index(input_output_map)
+    output_variables = _get_ordered_output_variables(input_output_map)
+    input_size = _get_max_input_index(input_output_map)
     output_size = length(output_variables)
     return ApplicationDrivenLearning.PredictiveModel(
         networks,
@@ -153,7 +153,7 @@ sizes are taken from its first and last parameterised layers and the
 to the whole input.
 """
 function PredictiveModel(network::Flux.Chain)
-    param_layers = [layer for layer in network if has_params(layer)]
+    param_layers = [layer for layer in network if _has_params(layer)]
     input_size = size(param_layers[1].weight, 2)
     output_size = size(param_layers[end].weight, 1)
     return PredictiveModel(
@@ -196,7 +196,7 @@ function PredictiveModel(
     network::Flux.Chain,
     input_output_map::Dict{Vector{Int},<:Vector{<:Forecast}},
 )
-    param_layers = [layer for layer in network if has_params(layer)]
+    param_layers = [layer for layer in network if _has_params(layer)]
     network_input_size = size(param_layers[1].weight, 2)
     network_output_size = size(param_layers[end].weight, 1)
     for (input_idx, output_idx) in input_output_map
@@ -204,8 +204,8 @@ function PredictiveModel(
         @assert length(output_idx) == network_output_size "Output indexes length must match model output size."
     end
 
-    output_variables = get_ordered_output_variables([input_output_map])
-    input_size = get_max_input_index([input_output_map])
+    output_variables = _get_ordered_output_variables([input_output_map])
+    input_size = _get_max_input_index([input_output_map])
     output_size = length(output_variables)
     return PredictiveModel(
         [deepcopy(network)],
@@ -235,8 +235,8 @@ function PredictiveModel(
         @assert length(output_idx) == network_output_size "Output indexes length must match model output size."
     end
 
-    output_variables = get_ordered_output_variables([input_output_map])
-    input_size = get_max_input_index([input_output_map])
+    output_variables = _get_ordered_output_variables([input_output_map])
+    input_size = _get_max_input_index([input_output_map])
     output_size = length(output_variables)
     return PredictiveModel(
         [deepcopy(network)],
@@ -259,13 +259,13 @@ Flux.trainable(model::PredictiveModel) = (networks = model.networks,)
 Functors.@functor PredictiveModel (networks,)
 
 """
-    find_elements_position(vec, elements)
+    _find_elements_position(vec, elements)
 
 Return the position in `vec` of each entry of `elements`. Used to map the
 forecast variables produced by a network onto the rows of the prediction
 matrix. Entries not present in `vec` yield `nothing`.
 """
-function find_elements_position(vec, elements)
+function _find_elements_position(vec, elements)
     return [findfirst(i -> i == j, vec) for j in elements]
 end
 
@@ -295,7 +295,7 @@ function (model::PredictiveModel)(X::AbstractMatrix)
         nn = model.networks[inn]
         for (input_idx, output_idx) in model.input_output_map[inn]
             Yhat[
-                find_elements_position(model.output_variables, output_idx),
+                _find_elements_position(model.output_variables, output_idx),
                 :,
             ] = nn(X[input_idx, :])
         end
@@ -332,7 +332,7 @@ function (model::PredictiveModel)(x::AbstractVector)
         for (input_idx, output_idx) in model.input_output_map[inn]
             # set the predicted output for the current output variables indices
             out_y_idx =
-                find_elements_position(model.output_variables, output_idx)
+                _find_elements_position(model.output_variables, output_idx)
             yhat[out_y_idx] = nn(x[input_idx])
         end
     end
@@ -345,7 +345,7 @@ end
 Extract the parameters of a PredictiveModel into a single vector.
 """
 function extract_params(model::PredictiveModel)
-    return vcat([extract_flux_params(nn) for nn in model.networks]...)
+    return vcat([_extract_flux_params(nn) for nn in model.networks]...)
 end
 
 """
@@ -354,7 +354,7 @@ end
 Return model after fixing the parameters from an adequate vector of parameters.
 """
 function apply_params(model::PredictiveModel, θ)
-    return fix_flux_params_multi_model(model.networks, θ)
+    return _fix_flux_params_multi_model(model.networks, θ)
 end
 
 """

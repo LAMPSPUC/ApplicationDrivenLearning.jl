@@ -1,11 +1,11 @@
 """
-    PolicyInfo
+    _PolicyInfo
 
 Internal container produced by `JuMP.build_variable` when a variable is
 declared with the [`Policy`](@ref) type. It carries the `JuMP.VariableInfo`
 used to create the twin variables in the plan and assess models.
 """
-struct PolicyInfo
+struct _PolicyInfo
     plan::JuMP.VariableInfo
     assess::JuMP.VariableInfo
     kwargs::Any
@@ -17,10 +17,10 @@ function JuMP.build_variable(
     ::Type{Policy};
     kwargs...,
 )
-    return PolicyInfo(info, info, kwargs)
+    return _PolicyInfo(info, info, kwargs)
 end
 
-function JuMP.add_variable(model::Model, policy_info::PolicyInfo, name::String)
+function JuMP.add_variable(model::Model, policy_info::_PolicyInfo, name::String)
     policy = Policy(
         JuMP.add_variable(
             model.plan,
@@ -38,7 +38,7 @@ function JuMP.add_variable(model::Model, policy_info::PolicyInfo, name::String)
 end
 
 """
-    ForecastInfo
+    _ForecastInfo
 
 Internal container produced by `JuMP.build_variable` when a variable is
 declared with the [`Forecast`](@ref) type. It carries the
@@ -46,7 +46,7 @@ declared with the [`Forecast`](@ref) type. It carries the
 models. Bounds are not supported on forecast variables and are dropped with a
 warning.
 """
-struct ForecastInfo
+struct _ForecastInfo
     plan::JuMP.VariableInfo
     assess::JuMP.VariableInfo
     kwargs::Any
@@ -58,12 +58,12 @@ function JuMP.build_variable(
     ::Type{Forecast};
     kwargs...,
 )
-    return ForecastInfo(info, info, kwargs)
+    return _ForecastInfo(info, info, kwargs)
 end
 
 function JuMP.add_variable(
     model::Model,
-    forecast_info::ForecastInfo,
+    forecast_info::_ForecastInfo,
     name::String,
 )
     forecast = Forecast(

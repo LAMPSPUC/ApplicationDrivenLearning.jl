@@ -3,16 +3,16 @@ using MPI
 import JobQueueMPI as JQM
 
 """
-    train_with_nelder_mead_mpi!(model, X, Y, params)
+    _train_with_nelder_mead_mpi!(model, X, Y, params)
 
-MPI counterpart of [`train_with_nelder_mead!`](@ref): the controller process
+MPI counterpart of `_train_with_nelder_mead!`: the controller process
 runs Nelder-Mead while the per-sample cost evaluations are distributed over
 the worker processes with JobQueueMPI.jl.
 
 Only the controller returns a meaningful [`Solution`](@ref). See
 [`NelderMeadMPIMode`](@ref) for the accepted `params`.
 """
-function train_with_nelder_mead_mpi!(
+function _train_with_nelder_mead_mpi!(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
@@ -33,7 +33,7 @@ function train_with_nelder_mead_mpi!(
     function step_cost(θ, i)
         apply_params(model.forecast, θ)
         yhat = model.forecast(X[i, :])
-        return compute_single_step_cost(model, Y[i, :], yhat)
+        return _compute_single_step_cost(model, Y[i, :], yhat)
     end
 
     # call optim as the controller

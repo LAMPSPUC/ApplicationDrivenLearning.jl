@@ -3,7 +3,7 @@ using Flux
 using BilevelJuMP
 
 """
-    solve_bilevel(model, X, Y, params)
+    _solve_bilevel(model, X, Y, params)
 
 Train the predictive model by building and solving the equivalent bilevel
 optimization problem with BilevelJuMP.jl.
@@ -15,7 +15,7 @@ are supported.
 
 See [`BilevelMode`](@ref) for the accepted `params`.
 """
-function solve_bilevel(
+function _solve_bilevel(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
@@ -93,7 +93,7 @@ function solve_bilevel(
     end
 
     # upper model base constraints
-    # the policy-fixing constraints added by `build` are replaced here by the
+    # the policy-fixing constraints added by `_build` are replaced here by the
     # link to the lower level, so they must be skipped. They live in a JuMP
     # container, so their names carry an index suffix (`assess_policy_fix[1]`).
     policy_fix_cons = Set(
@@ -149,7 +149,7 @@ function solve_bilevel(
         i_layer = 1
         for layer in model.forecast.networks[ipred]
             # if it is layer with parameters, process output
-            if has_params(layer)
+            if _has_params(layer)
                 # get size and parameters W and b
                 (layer_size_out, layer_size_in) = size(layer.weight)
                 W = @variable(
@@ -178,7 +178,7 @@ function solve_bilevel(
             i_layer += 1
         end
         for (output_idx, prediction) in layers_inpt
-            y_hat[:, find_elements_position(model.forecast_vars, output_idx)] =
+            y_hat[:, _find_elements_position(model.forecast_vars, output_idx)] =
                 prediction
         end
     end
@@ -201,7 +201,7 @@ function solve_bilevel(
     for ipred = 1:npreds
         ilayer = 1
         for layer in model.forecast.networks[ipred]
-            if has_params(layer)
+            if _has_params(layer)
                 for p in Flux.trainables(layer.weight)
                     p .= value.(predictive_model_vars[ipred][ilayer][:W])
                 end

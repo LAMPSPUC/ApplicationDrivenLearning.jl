@@ -1,7 +1,7 @@
 using Optim
 
 """
-    train_with_nelder_mead!(model, X, Y, params)
+    _train_with_nelder_mead!(model, X, Y, params)
 
 Train the predictive model with the derivative-free Nelder-Mead algorithm from
 Optim.jl, using the assessed cost as the objective.
@@ -9,7 +9,7 @@ Optim.jl, using the assessed cost as the objective.
 See [`NelderMeadMode`](@ref) for the accepted `params`; any key other than
 `initial_simplex` and `parameters` is forwarded to `Optim.Options`.
 """
-function train_with_nelder_mead!(
+function _train_with_nelder_mead!(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},

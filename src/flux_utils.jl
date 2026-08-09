@@ -1,24 +1,24 @@
 using Flux
 
 """
-    extract_flux_params(model)
+    _extract_flux_params(model)
 
 Extract the trainable parameters of any Flux model or layer into a single
 flat vector, in `Flux.trainables` order.
 """
-function extract_flux_params(model)
+function _extract_flux_params(model)
     θ = Flux.trainables(model)
     return reduce(vcat, [vec(p) for p in θ])
 end
 
 """
-    fix_flux_params_single_model(model, θ)
+    _fix_flux_params_single_model(model, θ)
 
 Return the model after overwriting its trainable parameters in place with the
 values of `θ`, which must be laid out as produced by
-[`extract_flux_params`](@ref).
+`_extract_flux_params`.
 """
-function fix_flux_params_single_model(model, θ::Vector{<:Real})
+function _fix_flux_params_single_model(model, θ::Vector{<:Real})
     i = 1
     for p in Flux.trainables(model)
         psize = prod(size(p))
@@ -29,13 +29,13 @@ function fix_flux_params_single_model(model, θ::Vector{<:Real})
 end
 
 """
-    fix_flux_params_multi_model(models, θ)
+    _fix_flux_params_multi_model(models, θ)
 
 Return the iterable of models after overwriting their trainable parameters in
 place with the values of `θ`, concatenated in model order as produced by
 [`extract_params`](@ref ApplicationDrivenLearning.extract_params).
 """
-function fix_flux_params_multi_model(models, θ::Vector{<:Real})
+function _fix_flux_params_multi_model(models, θ::Vector{<:Real})
     i = 1
     for model in models
         for p in Flux.trainables(model)
@@ -48,11 +48,11 @@ function fix_flux_params_multi_model(models, θ::Vector{<:Real})
 end
 
 """
-    has_params(layer)
+    _has_params(layer)
 
 Check if a Flux layer has parameters.
 """
-function has_params(layer)
+function _has_params(layer)
     try
         # Attempt to get trainable parameters; if it works and isn't empty, return true
         return !isempty(Flux.trainable(layer))

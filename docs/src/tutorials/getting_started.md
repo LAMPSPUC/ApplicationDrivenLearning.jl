@@ -4,7 +4,7 @@ This is a quick introduction to modeling and training end-to-end forecast models
 
 ## A first example
 
-We will train an energy load predictive model that is applied to a one-hour-ahead generation planning problem in a power system consisting of a single plant with the following characteristics: a production capacity of 4 MW and a generation cost of R$10/MWh.
+We will train an energy load predictive model that is applied to a one-hour-ahead generation planning problem in a power system consisting of a single plant with the following characteristics: a production capacity of 4 MW and a generation cost of R\$10/MWh.
 
 The available data is very limited: we don't have any auxiliary variable and just two samples of past demand.
 

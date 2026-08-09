@@ -208,7 +208,7 @@ function set_forecast_model(
 end
 
 """
-    build_plan_model_forecast_params(model::Model)
+    _build_plan_model_forecast_params(model::Model)
 
 Turn the plan model's [`Forecast`](@ref) variables into `MOI.Parameter`
 variables (initialised at zero) and record them in
@@ -216,7 +216,7 @@ variables (initialised at zero) and record them in
 model output at every cost evaluation, and DiffOpt differentiates the plan
 model with respect to them.
 """
-function build_plan_model_forecast_params(model::Model)
+function _build_plan_model_forecast_params(model::Model)
     # adds parametrized forecast variables using MOI.Parameter
     forecast_size = length(model.forecast_vars)
     model.plan_forecast_params = plan_forecast_vars(model)
@@ -227,14 +227,14 @@ function build_plan_model_forecast_params(model::Model)
 end
 
 """
-    build_assess_model_policy_constraint(model::Model)
+    _build_assess_model_policy_constraint(model::Model)
 
 Add the `assess_policy_fix` constraint to the assess model, which pins each
 assess [`Policy`](@ref) variable to the value chosen by the plan model. The
 right-hand side is updated at every cost evaluation, and its dual is the
 gradient of the assessed cost with respect to the policy.
 """
-function build_assess_model_policy_constraint(model::Model)
+function _build_assess_model_policy_constraint(model::Model)
     return @constraint(
         model.assess,
         assess_policy_fix,
@@ -243,21 +243,21 @@ function build_assess_model_policy_constraint(model::Model)
 end
 
 """
-    build(model::Model)
+    _build(model::Model)
 
 Add the variables and constraints required for cost computation to the plan
 and assess models. Called automatically by [`compute_cost`](@ref); repeated
 calls are no-ops.
 """
-function build(model::Model)
+function _build(model::Model)
     if model.build
         return
     end
     model.build = true
 
     # build plan model
-    build_plan_model_forecast_params(model)
-    return build_assess_model_policy_constraint(model)
+    _build_plan_model_forecast_params(model)
+    return _build_assess_model_policy_constraint(model)
 end
 
 include("jump.jl")
@@ -271,7 +271,7 @@ include("optimizers/gradient_mpi.jl")
 include("optimizers/bilevel.jl")
 
 """
-    dict_to_var_indexed_matrix(data::Dict{<:Forecast,<:Vector}, row_index::Vector{<:Forecast})
+    _dict_to_var_indexed_matrix(data::Dict{<:Forecast,<:Vector}, row_index::Vector{<:Forecast})
 
 Transform a dictionary that maps [`Forecast`](@ref) variables to their
 realized series into a `(samples x variables)` matrix whose columns follow the
@@ -280,7 +280,7 @@ order of `row_index`.
 Every variable in `row_index` must be a key of `data`, and all series must
 have the same length.
 """
-function dict_to_var_indexed_matrix(
+function _dict_to_var_indexed_matrix(
     data::Dict{<:Forecast,<:Vector},
     row_index::Vector{<:Forecast},
 )
@@ -332,23 +332,23 @@ function train!(
         )
     end
 
-    # the MPI modes call `compute_single_step_cost` directly instead of going
+    # the MPI modes call `_compute_single_step_cost` directly instead of going
     # through `compute_cost`, so the parameters and the policy-fixing
     # constraint have to be in place before training starts
-    build(model)
+    _build(model)
 
     y = Y
 
     if options.mode == NelderMeadMode
-        return train_with_nelder_mead!(model, X, y, options.params)
+        return _train_with_nelder_mead!(model, X, y, options.params)
     elseif options.mode == GradientMode
-        return train_with_gradient!(model, X, y, options.params)
+        return _train_with_gradient!(model, X, y, options.params)
     elseif options.mode == NelderMeadMPIMode
-        return train_with_nelder_mead_mpi!(model, X, y, options.params)
+        return _train_with_nelder_mead_mpi!(model, X, y, options.params)
     elseif options.mode == GradientMPIMode
-        return train_with_gradient_mpi!(model, X, y, options.params)
+        return _train_with_gradient_mpi!(model, X, y, options.params)
     elseif options.mode == BilevelMode
-        return solve_bilevel(model, X, y, options.params)
+        return _solve_bilevel(model, X, y, options.params)
     else
         # should never get here: Options rejects unknown modes on construction
         throw(ArgumentError("Invalid optimization method"))
@@ -373,7 +373,7 @@ function train!(
     return train!(
         model,
         X,
-        dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
+        _dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
         options,
     )
 end
@@ -385,7 +385,6 @@ export Model,
     Policy,
     Forecast,
     set_forecast_model,
-    forecast,
     compute_cost,
     train!
 end
