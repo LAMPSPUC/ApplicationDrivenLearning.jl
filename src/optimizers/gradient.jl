@@ -1,10 +1,15 @@
 using Flux
 
 """
-Compute assess cost and cost gradient (with respect to predicted values) based
-on incomplete batch of examples.
+    _stochastic_compute(model, X, Y, batch, compute_full_cost)
+
+Compute the assess cost and the cost gradient (with respect to the predicted
+values) on a subset `batch` of the examples.
+
+When `compute_full_cost` is `true`, the returned cost is recomputed over the
+whole dataset — the gradient still refers to the batch only.
 """
-function stochastic_compute(model, X, Y, batch, compute_full_cost::Bool)
+function _stochastic_compute(model, X, Y, batch, compute_full_cost::Bool)
     C, dC = compute_cost(model, X[batch, :], Y[batch, :], true)
     if compute_full_cost
         C = compute_cost(model, X, Y, false)
@@ -13,15 +18,27 @@ function stochastic_compute(model, X, Y, batch, compute_full_cost::Bool)
 end
 
 """
-Compute assess cost and cost gradient (with respect to predicted values) based
-on complete batch of examples.
+    _deterministic_compute(model, X, Y)
+
+Compute the assess cost and the cost gradient (with respect to the predicted
+values) on the complete set of examples.
 """
-function deterministic_compute(model, X, Y)
+function _deterministic_compute(model, X, Y)
     C, dC = compute_cost(model, X, Y, true)
     return C, dC
 end
 
-function train_with_gradient!(
+"""
+    _train_with_gradient!(model, X, Y, params)
+
+Train the predictive model with first-order updates driven by the gradient of
+the assessed cost with respect to the forecasts.
+
+Runs for at most `epochs` iterations, keeping the parameters with the lowest
+cost seen, and stops early on `time_limit` or `g_tol`. See [`GradientMode`](@ref)
+for the accepted `params`.
+"""
+function _train_with_gradient!(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
@@ -41,15 +58,12 @@ function train_with_gradient!(
     T = size(X)[1]
     best_C = Inf
     best_θ = extract_params(model.forecast)
-    trace = Array{Float64}(undef, epochs)
     stochastic = batch_size > 0
     opt_state = Flux.setup(rule, model.forecast)
 
-    # precompute batches
-    batches = repeat(1:T, outer = (1, epochs))'
-    if stochastic
-        batches = rand(1:T, (epochs, batch_size))
-    end
+    # precompute batches (only needed in the stochastic case; the
+    # deterministic branch uses the full dataset directly)
+    batches = stochastic ? rand(1:T, (epochs, batch_size)) : zeros(Int, 0, 0)
 
     # main loop
     for epoch = 1:epochs
@@ -57,7 +71,7 @@ function train_with_gradient!(
 
         if stochastic
             epochx = X[batches[epoch, :], :]
-            C, dC = stochastic_compute(
+            C, dC = _stochastic_compute(
                 model,
                 X,
                 Y,
@@ -66,12 +80,11 @@ function train_with_gradient!(
             )
         else
             epochx = X
-            C, dC = deterministic_compute(model, X, Y)
+            C, dC = _deterministic_compute(model, X, Y)
         end
 
         if compute_full_cost
-            # store and print cost
-            trace[epoch] = C
+            # print cost
             if verbose
                 dtime = time() - start_time
                 println(

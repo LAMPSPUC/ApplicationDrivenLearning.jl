@@ -3,7 +3,17 @@ import ParametricOptInterface as POI
 using MPI
 import JobQueueMPI as JQM
 
-function train_with_gradient_mpi!(
+"""
+    _train_with_gradient_mpi!(model, X, Y, params)
+
+MPI counterpart of `_train_with_gradient!`: the controller process runs
+the optimiser while the per-sample cost and gradient evaluations are
+distributed over the worker processes with JobQueueMPI.jl.
+
+Only the controller returns a meaningful [`Solution`](@ref). See
+[`GradientMPIMode`](@ref) for the accepted `params`.
+"""
+function _train_with_gradient_mpi!(
     model::Model,
     X::Matrix{<:Real},
     Y::Matrix{<:Real},
@@ -27,27 +37,27 @@ function train_with_gradient_mpi!(
     best_C = Inf
     best_θ = extract_params(model.forecast)
     curr_C = 0.0
-    trace = Array{Float64}(undef, epochs)
-    dCdz = Vector{Float32}(undef, size(model.policy_vars, 1))
-    dCdy = Vector{Float32}(undef, model.forecast.output_size)
+    # solver duals and DiffOpt sensitivities are Float64
+    dCdz = Vector{Float64}(undef, length(model.policy_vars))
+    dCdy = Vector{Float64}(undef, model.forecast.output_size)
     T = size(X)[1]
     stochastic = batch_size > 0
     compute_full_cost = true
     opt_state = Flux.setup(rule, model.forecast)
 
-    # precompute batches
-    batches = repeat(1:T, outer = (1, epochs))'
-    if stochastic
-        batches = rand(1:T, (epochs, batch_size))
-    end
+    # precompute batches (only needed in the stochastic case; the
+    # deterministic branch uses the full dataset directly)
+    batches = stochastic ? rand(1:T, (epochs, batch_size)) : zeros(Int, 0, 0)
 
     # cost and gradient compute function
     function compute_cost_and_gradients(θ, i, compute_gradient::Bool)
         apply_params(model.forecast, θ)
         yhat = model.forecast(X[i, :])
-        step_cost = compute_single_step_cost(model, Y[i, :], yhat)
+        step_cost = _compute_single_step_cost(model, Y[i, :], yhat)
         if compute_gradient
-            step_grad = compute_single_step_gradient(model, dCdz, dCdy)
+            # `_compute_single_step_gradient` returns the shared `dCdy` buffer,
+            # so it must be copied before being handed back to the caller
+            step_grad = copy(_compute_single_step_gradient(model, dCdz, dCdy))
         else
             step_grad = nothing
         end
@@ -105,8 +115,7 @@ function train_with_gradient_mpi!(
             end
 
             if compute_full_cost
-                # store and print cost
-                trace[epoch] = curr_C
+                # print cost
                 if verbose
                     dtime = time() - start_time
                     println(
@@ -137,7 +146,7 @@ function train_with_gradient_mpi!(
                 break
             end
 
-            # take gradient step (if not last epoch)
+            # take gradient step
             apply_gradient!(model.forecast, dC, epochx, opt_state)
         end
 
@@ -149,7 +158,7 @@ function train_with_gradient_mpi!(
         apply_params(model.forecast, best_θ)
 
     elseif JQM.is_worker_process()
-        # continuoslly call pmap until controller is done
+        # continuously call pmap until controller is done
         while true
             is_done = MPI.bcast(is_done, MPI.COMM_WORLD)
             if is_done

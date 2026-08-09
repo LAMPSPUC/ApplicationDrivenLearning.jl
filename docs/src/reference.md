@@ -1,6 +1,10 @@
 # [API](@id API)
 
-This section documents the ApplicationDrivenLearning API.
+This section documents the public ApplicationDrivenLearning API.
+
+Functions and types whose name starts with an underscore are internal
+implementation details: they are not part of the public API, are not listed
+here, and may change without a breaking release.
 
 ## Constructors
 
@@ -45,15 +49,6 @@ ApplicationDrivenLearning.assess_forecast_vars
 ApplicationDrivenLearning.set_forecast_model
 ApplicationDrivenLearning.extract_params
 ApplicationDrivenLearning.apply_params
-```
-
-### Flux attributes getters and setters
-
-```@docs
-ApplicationDrivenLearning.extract_flux_params
-ApplicationDrivenLearning.fix_flux_params_single_model
-ApplicationDrivenLearning.fix_flux_params_multi_model
-ApplicationDrivenLearning.has_params
 ApplicationDrivenLearning.apply_gradient!
 ```
 
@@ -62,7 +57,4 @@ ApplicationDrivenLearning.apply_gradient!
 ```@docs
 compute_cost
 train!
-ApplicationDrivenLearning.build_plan_model_forecast_params
-ApplicationDrivenLearning.build_assess_model_policy_constraint
-ApplicationDrivenLearning.build
 ```

@@ -2,7 +2,7 @@
 
 This example shows how to use the ApplicationDrivenLearning.jl package to solve a minimal scheduling problem.
 
-In this problem, we have to define the dispatch of a single unit, considering it's operational constraints, costs and the demand. The cost for under-dispatching is 100 and the cost for over-dispatching is 20. The forecast model will be a simple linear model.
+In this problem, we have to define the dispatch of a single unit, considering its operational constraints, costs and the demand. The cost for under-dispatching is 100 and the cost for over-dispatching is 20. The forecast model will be a simple linear model.
 
 The plan model will only assign the dispatch of the unit equal to the forecast. The assess model will apply a correction to the dispatch, considering the under-dispatching and over-dispatching costs.
 

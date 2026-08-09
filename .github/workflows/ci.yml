@@ -23,6 +23,8 @@ jobs:
       fail-fast: false
       matrix:
         version:
+          # oldest supported version, per the `julia` compat bound in Project.toml
+          - '1.10'
           - '1.11'
           - '1'
         os:
