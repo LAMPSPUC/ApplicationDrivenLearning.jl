@@ -1,5 +1,4 @@
 using Flux
-import ParametricOptInterface as POI
 using MPI
 import JobQueueMPI as JQM
 

@@ -44,6 +44,6 @@ function _train_with_nelder_mead!(
     final_sol = Optim.minimizer(res)
     apply_params(model.forecast, final_sol)
     # return cost
-    final_cost = minimum(res)
+    final_cost = Optim.minimum(res)
     return Solution(final_cost, final_sol)
 end

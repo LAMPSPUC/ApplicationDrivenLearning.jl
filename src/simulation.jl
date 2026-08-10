@@ -19,7 +19,7 @@ function _compute_single_step_cost(
     @timeit_debug _TIMER "set_params" begin
         params = model.plan_forecast_params
         for j in eachindex(params, yhat)
-            MOI.set(model.plan, POI.ParameterValue(), params[j], yhat[j])
+            set_parameter_value(params[j], yhat[j])
         end
     end
     # optimize plan model

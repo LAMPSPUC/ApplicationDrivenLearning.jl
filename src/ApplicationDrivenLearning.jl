@@ -3,7 +3,6 @@ module ApplicationDrivenLearning
 using Flux
 using JuMP
 using DiffOpt
-import ParametricOptInterface as POI
 import Base.*, Base.+
 
 # must come first: the files below expand `@timeit_debug` sections against the
@@ -257,21 +256,21 @@ end
 """
     _build_plan_model_forecast_params(model::Model)
 
-Turn the plan model's [`Forecast`](@ref) variables into `MOI.Parameter`
+Turn the plan model's [`Forecast`](@ref) variables into `Parameter`
 variables (initialised at zero) and record them in
 `model.plan_forecast_params`. Their values are then set to the predictive
 model output at every cost evaluation, and DiffOpt differentiates the plan
 model with respect to them.
 """
 function _build_plan_model_forecast_params(model::Model)
-    # adds parametrized forecast variables using MOI.Parameter
+    # adds parametrized forecast variables using JuMP's `Parameter` set
     forecast_size = length(model.forecast_vars)
     # `copy` so that the two fields stay independent: `plan_forecast_vars`
     # returns the vector owned by `model`, not a fresh one
     model.plan_forecast_params = copy(plan_forecast_vars(model))
     return @constraint(
         model.plan,
-        model.plan_forecast_params .∈ MOI.Parameter.(zeros(forecast_size))
+        model.plan_forecast_params .∈ Parameter.(zeros(forecast_size))
     )
 end
 

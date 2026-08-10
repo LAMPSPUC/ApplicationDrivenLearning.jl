@@ -58,7 +58,7 @@ function _train_with_nelder_mead_mpi!(
         apply_params(model.forecast, final_sol)
 
         # get cost
-        final_cost = minimum(res)
+        final_cost = Optim.minimum(res)
 
         # release workers
         is_done = true
