@@ -6,6 +6,10 @@ using DiffOpt
 import ParametricOptInterface as POI
 import Base.*, Base.+
 
+# must come first: the files below expand `@timeit_debug` sections against the
+# `TIMER` declared here
+include("timing.jl")
+
 include("flux_utils.jl")
 
 """
@@ -79,10 +83,30 @@ end
 include("predictive_model.jl")
 
 """
+    ApplicationDrivenLearning._PolicyFixConstraint
+
+Concrete type of the entries of the `assess_policy_fix` constraint vector, kept
+as an alias so that the [`Model`](@ref) field holding them is concretely typed.
+The constraints are built as `assess_policy_var == 0`, which JuMP always
+represents as a `ScalarAffineFunction`-in-`EqualTo`.
+"""
+const _PolicyFixConstraint = JuMP.ConstraintRef{
+    JuMP.Model,
+    MOI.ConstraintIndex{MOI.ScalarAffineFunction{Float64},MOI.EqualTo{Float64}},
+    JuMP.ScalarShape,
+}
+
+"""
     Model <: JuMP.AbstractModel
 
 Create an empty ApplicationDrivenLearning.Model with empty plan and assess
 models, missing forecast model and default settings.
+
+Besides the [`Policy`](@ref) and [`Forecast`](@ref) variable pairs, the model
+keeps the plan-side and assess-side variables split into their own concretely
+typed vectors. Those are what the per-sample cost evaluation actually iterates
+over, so they are maintained as variables are declared rather than rebuilt on
+every access.
 """
 mutable struct Model <: JuMP.AbstractModel
     plan::JuMP.Model
@@ -90,9 +114,18 @@ mutable struct Model <: JuMP.AbstractModel
     forecast::Union{PredictiveModel,Nothing}
 
     # variable arrays
-    policy_vars::Vector{Policy}
-    forecast_vars::Vector{Forecast}
+    policy_vars::Vector{Policy{JuMP.VariableRef}}
+    forecast_vars::Vector{Forecast{JuMP.VariableRef}}
     plan_forecast_params::Vector{JuMP.VariableRef}
+
+    # plan/assess splits of the above, kept in sync by `JuMP.add_variable`
+    _plan_policy_vars::Vector{JuMP.VariableRef}
+    _assess_policy_vars::Vector{JuMP.VariableRef}
+    _plan_forecast_vars::Vector{JuMP.VariableRef}
+    _assess_forecast_vars::Vector{JuMP.VariableRef}
+
+    # `assess_policy_fix` constraints, filled in by `_build`
+    _assess_policy_fix::Vector{_PolicyFixConstraint}
 
     # API part
     obj_dict::Dict{Symbol,Any}
@@ -106,9 +139,14 @@ mutable struct Model <: JuMP.AbstractModel
             plan,
             assess,
             nothing,
-            Vector{Policy}(),
-            Vector{Forecast}(),
+            Vector{Policy{JuMP.VariableRef}}(),
+            Vector{Forecast{JuMP.VariableRef}}(),
             Vector{JuMP.VariableRef}(),
+            Vector{JuMP.VariableRef}(),
+            Vector{JuMP.VariableRef}(),
+            Vector{JuMP.VariableRef}(),
+            Vector{JuMP.VariableRef}(),
+            Vector{_PolicyFixConstraint}(),
             Dict{Symbol,Any}(),
             false,
         )
@@ -120,40 +158,49 @@ end
 
 Return the vector of [`Policy`](@ref) variables that belong to the plan model,
 in declaration order.
+
+The vector is owned by `model` and is not a copy; do not mutate it.
 """
-function plan_policy_vars(model::Model)
-    return [v.plan for v in model.policy_vars]
-end
+plan_policy_vars(model::Model) = model._plan_policy_vars
 
 """
     assess_policy_vars(model::Model)
 
 Return the vector of [`Policy`](@ref) variables that belong to the assess
 model, in declaration order (matching [`plan_policy_vars`](@ref)).
+
+The vector is owned by `model` and is not a copy; do not mutate it.
 """
-function assess_policy_vars(model::Model)
-    return [v.assess for v in model.policy_vars]
-end
+assess_policy_vars(model::Model) = model._assess_policy_vars
 
 """
     plan_forecast_vars(model::Model)
 
 Return the vector of [`Forecast`](@ref) variables that belong to the plan
 model, in declaration order.
+
+The vector is owned by `model` and is not a copy; do not mutate it.
 """
-function plan_forecast_vars(model::Model)
-    return [v.plan for v in model.forecast_vars]
-end
+plan_forecast_vars(model::Model) = model._plan_forecast_vars
 
 """
     assess_forecast_vars(model::Model)
 
 Return the vector of [`Forecast`](@ref) variables that belong to the assess
 model, in declaration order (matching [`plan_forecast_vars`](@ref)).
+
+The vector is owned by `model` and is not a copy; do not mutate it.
 """
-function assess_forecast_vars(model::Model)
-    return [v.assess for v in model.forecast_vars]
-end
+assess_forecast_vars(model::Model) = model._assess_forecast_vars
+
+"""
+    assess_policy_fix_cons(model::Model)
+
+Return the `assess_policy_fix` constraints, which pin the assess
+[`Policy`](@ref) variables to the values chosen by the plan model. Empty until
+[`_build`](@ref) has been called.
+"""
+assess_policy_fix_cons(model::Model) = model._assess_policy_fix
 
 """
     set_forecast_model(model::Model, network)
@@ -219,7 +266,9 @@ model with respect to them.
 function _build_plan_model_forecast_params(model::Model)
     # adds parametrized forecast variables using MOI.Parameter
     forecast_size = length(model.forecast_vars)
-    model.plan_forecast_params = plan_forecast_vars(model)
+    # `copy` so that the two fields stay independent: `plan_forecast_vars`
+    # returns the vector owned by `model`, not a fresh one
+    model.plan_forecast_params = copy(plan_forecast_vars(model))
     return @constraint(
         model.plan,
         model.plan_forecast_params .∈ MOI.Parameter.(zeros(forecast_size))
@@ -235,11 +284,15 @@ right-hand side is updated at every cost evaluation, and its dual is the
 gradient of the assessed cost with respect to the policy.
 """
 function _build_assess_model_policy_constraint(model::Model)
-    return @constraint(
+    cons = @constraint(
         model.assess,
         assess_policy_fix,
         assess_policy_vars(model) .== 0
     )
+    # cached so that the per-sample loop does not go through the (untyped)
+    # object dictionary of the assess model on every evaluation
+    model._assess_policy_fix = cons
+    return cons
 end
 
 """
@@ -386,5 +439,7 @@ export Model,
     Forecast,
     set_forecast_model,
     compute_cost,
-    train!
+    train!,
+    enable_timing!,
+    disable_timing!
 end

@@ -34,6 +34,8 @@ function JuMP.add_variable(model::Model, policy_info::_PolicyInfo, name::String)
         ),
     )
     push!(model.policy_vars, policy)
+    push!(model._plan_policy_vars, policy.plan)
+    push!(model._assess_policy_vars, policy.assess)
     return policy
 end
 
@@ -93,6 +95,8 @@ function JuMP.add_variable(
     end
 
     push!(model.forecast_vars, forecast)
+    push!(model._plan_forecast_vars, forecast.plan)
+    push!(model._assess_forecast_vars, forecast.assess)
     return forecast
 end
 

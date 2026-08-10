@@ -56,8 +56,11 @@ function _solve_bilevel(
 
     # upper model variables
     up_var_map = Dict{JuMP.VariableRef,Vector{BilevelJuMP.BilevelVariableRef}}()
+    # hoisted out of the loop so the membership test is a hash lookup rather
+    # than a linear scan for each of the assess model's variables
+    policy_var_set = Set(assess_policy_vars(model))
     for post_var in all_variables(model.assess)
-        if !(post_var in assess_policy_vars(model))
+        if !(post_var in policy_var_set)
             up_var_name = string(name(post_var), "_up")
             up_var_ref =
                 @variable(Upper(bilevel_model), [1:T], base_name = up_var_name)
@@ -72,11 +75,11 @@ function _solve_bilevel(
     end
 
     # point to lower model decision variables on upper model
-    i_dec_var = 1
-    for pre_dec_var in plan_policy_vars(model)
-        post_dec_var = assess_policy_vars(model)[i_dec_var]
-        up_var_map[post_dec_var] = low_var_map[pre_dec_var]
-        i_dec_var += 1
+    plan_dec_vars = plan_policy_vars(model)
+    assess_dec_vars = assess_policy_vars(model)
+    for i_dec_var in eachindex(plan_dec_vars, assess_dec_vars)
+        up_var_map[assess_dec_vars[i_dec_var]] =
+            low_var_map[plan_dec_vars[i_dec_var]]
     end
 
     # lower model base constraints

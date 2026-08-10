@@ -22,7 +22,8 @@ function _fix_flux_params_single_model(model, θ::Vector{<:Real})
     i = 1
     for p in Flux.trainables(model)
         psize = prod(size(p))
-        p .= reshape(θ[i:i+psize-1], size(p))
+        # `@view` because the slice is only read by the in-place assignment
+        p .= reshape(@view(θ[i:i+psize-1]), size(p))
         i += psize
     end
     return model
@@ -40,7 +41,8 @@ function _fix_flux_params_multi_model(models, θ::Vector{<:Real})
     for model in models
         for p in Flux.trainables(model)
             psize = prod(size(p))
-            p .= reshape(θ[i:i+psize-1], size(p))
+            # `@view` because the slice is only read by the in-place assignment
+            p .= reshape(@view(θ[i:i+psize-1]), size(p))
             i += psize
         end
     end
