@@ -1,5 +1,8 @@
 # Tests for the opt-in `@timeit_debug` instrumentation of the hot path.
 #
+# The instrumentation is internal, so everything here is reached through
+# qualified `_`-prefixed names rather than exports.
+#
 # `TimerOutputs` is reached through the package rather than added as a test
 # dependency, so that these tests always exercise the exact version the package
 # resolves to.
@@ -24,17 +27,17 @@ _timer_sections(to) = keys(TO.todict(to)["inner_timers"])
     Xt = Float32.(ones(Tt, 1))
     Yt = Float32.(ones(Tt, 1))
 
-    to = ApplicationDrivenLearning.timer()
+    to = ApplicationDrivenLearning._timer()
     @test to isa TO.TimerOutput
 
     # the sections must record nothing until they are explicitly enabled
-    ApplicationDrivenLearning.reset_timer!()
+    ApplicationDrivenLearning._reset_timer!()
     ApplicationDrivenLearning.compute_cost(tmodel, Xt, Yt)
     @test isempty(_timer_sections(to))
 
-    ApplicationDrivenLearning.enable_timing!()
+    ApplicationDrivenLearning._enable_timing!()
     try
-        ApplicationDrivenLearning.reset_timer!()
+        ApplicationDrivenLearning._reset_timer!()
         ApplicationDrivenLearning.compute_cost(tmodel, Xt, Yt)
 
         sections = _timer_sections(to)
@@ -60,17 +63,17 @@ _timer_sections(to) = keys(TO.todict(to)["inner_timers"])
         @test TO.ncalls(to["sample_loop"]["diffopt_reverse"]) == Tt
 
         buf = IOBuffer()
-        ApplicationDrivenLearning.print_timer(buf)
+        ApplicationDrivenLearning._print_timer(buf)
         @test occursin("sample_loop", String(take!(buf)))
 
-        ApplicationDrivenLearning.reset_timer!()
+        ApplicationDrivenLearning._reset_timer!()
         @test isempty(_timer_sections(to))
     finally
-        ApplicationDrivenLearning.disable_timing!()
+        ApplicationDrivenLearning._disable_timing!()
     end
 
     # ... and stop recording again once disabled
-    ApplicationDrivenLearning.reset_timer!()
+    ApplicationDrivenLearning._reset_timer!()
     ApplicationDrivenLearning.compute_cost(tmodel, Xt, Yt)
     @test isempty(_timer_sections(to))
 end

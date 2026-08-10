@@ -345,7 +345,7 @@ end
 Extract the parameters of a PredictiveModel into a single vector.
 """
 function extract_params(model::PredictiveModel)
-    @timeit_debug TIMER "extract_params" begin
+    @timeit_debug _TIMER "extract_params" begin
         # NOTE: keep the splat. `reduce(vcat, xs)` returns `xs[1]` untouched
         # when there is a single network, and `_extract_flux_params` itself
         # returns `vec(p)` - an alias of the live weights - when that network
@@ -361,7 +361,7 @@ end
 Return model after fixing the parameters from an adequate vector of parameters.
 """
 function apply_params(model::PredictiveModel, θ)
-    @timeit_debug TIMER "apply_params" begin
+    @timeit_debug _TIMER "apply_params" begin
         return _fix_flux_params_multi_model(model.networks, θ)
     end
 end
@@ -395,12 +395,12 @@ function apply_gradient!(
     opt_state,
 )
     surrogate_loss(m, X) = sum(dCdy' .* m(X')) / size(X, 1)
-    grad = @timeit_debug TIMER "zygote_backward" Zygote.gradient(
+    grad = @timeit_debug _TIMER "zygote_backward" Zygote.gradient(
         surrogate_loss,
         model,
         X,
     )[1]
-    return @timeit_debug TIMER "optimiser_update" Optimisers.update!(
+    return @timeit_debug _TIMER "optimiser_update" Optimisers.update!(
         opt_state,
         model,
         grad,

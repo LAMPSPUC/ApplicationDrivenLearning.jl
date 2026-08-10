@@ -7,7 +7,7 @@ import ParametricOptInterface as POI
 import Base.*, Base.+
 
 # must come first: the files below expand `@timeit_debug` sections against the
-# `TIMER` declared here
+# `_TIMER` declared here
 include("timing.jl")
 
 include("flux_utils.jl")
@@ -439,7 +439,5 @@ export Model,
     Forecast,
     set_forecast_model,
     compute_cost,
-    train!,
-    enable_timing!,
-    disable_timing!
+    train!
 end
