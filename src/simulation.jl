@@ -120,8 +120,14 @@ Compute the cost function (C) based on the model predictions and the true values
 # Arguments
 
   - `model::ApplicationDrivenLearning.Model`: model to evaluate.
-  - `X::Matrix{<:Real}`: input data.
-  - `Y::Matrix{<:Real}`: true values.
+  - `X`: input data of size `(T, input_size)`. A matrix or vector, whose columns
+    are taken in order, or a Tables.jl-compatible table such as a `DataFrame`,
+    whose columns are selected by the predictive model's `input_names`.
+  - `Y`: realized values. A `(T, output_size)` matrix, a vector, a
+    Tables.jl-compatible table, or a `Dict` mapping each [`Forecast`](@ref)
+    variable to its series. Table columns are matched to the forecast variables
+    by name, never by position; see [`set_forecast_model`](@ref) for how those
+    names are declared.
   - `with_gradients::Bool=false`: flag to compute and return the cost gradients
     with respect to the forecasts. When set, the second returned value is the
     per-sample gradient matrix of size `(T, output_size)`.
@@ -131,23 +137,38 @@ Compute the cost function (C) based on the model predictions and the true values
 """
 function compute_cost(
     model::Model,
-    X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
     with_gradients::Bool = false,
     aggregate::Bool = true,
 )
-    if isnothing(model.forecast)
+    _assert_forecast_model_set(model)
+
+    # data shape checks. `ArgumentError` rather than `@assert`: these validate
+    # caller-supplied data, and an `@assert` is documented as removable at some
+    # optimization levels, which would turn a wrong shape into a wrong answer
+    if size(X, 1) != size(Y, 1)
         throw(
             ArgumentError(
-                "No forecast model set. Call set_forecast_model first.",
+                "`X` has $(size(X, 1)) sample(s) but `Y` has $(size(Y, 1)); " *
+                "they must have the same number of rows.",
+            ),
+        )
+    elseif size(X, 2) != model.forecast.input_size
+        throw(
+            ArgumentError(
+                "`X` has $(size(X, 2)) column(s) but the predictive model takes " *
+                "$(model.forecast.input_size) input(s).",
+            ),
+        )
+    elseif size(Y, 2) != model.forecast.output_size
+        throw(
+            ArgumentError(
+                "`Y` has $(size(Y, 2)) column(s) but the predictive model " *
+                "produces $(model.forecast.output_size) output(s).",
             ),
         )
     end
-
-    # data size assertions
-    @assert size(X)[1] == size(Y)[1] "X and Y must have the same number of samples"
-    @assert size(X)[2] == model.forecast.input_size "Input size mismatch"
-    @assert size(Y)[2] == model.forecast.output_size "Output size mismatch"
 
     # build model variables if necessary
     _build(model)
@@ -203,24 +224,31 @@ function compute_cost(
 end
 
 """
-    compute_cost(model, X, Y_dict, with_gradients=false, aggregate=true)
+    compute_cost(model, X, Y, with_gradients=false, aggregate=true)
 
-Variant of [`compute_cost`](@ref) that takes the realized values as a
-dictionary mapping each [`Forecast`](@ref) variable to its series, instead of
-a matrix. The columns are ordered to match the predictive model output.
+Variant of [`compute_cost`](@ref) accepting any combination of the supported
+input containers — matrices, vectors, Tables.jl-compatible tables such as a
+`DataFrame`, and a `Dict` mapping each [`Forecast`](@ref) variable to its series.
+Both arguments are normalized to matrices together — which is what lets the rows
+be matched by `sample_key` — and the call is forwarded to the matrix method.
+
+`X` and `Y` are `@nospecialize`d. Without it this wrapper is specialized on the
+concrete container types, and specializing it drags the whole `compute_cost`
+body — sample loop, solver calls and all — through inference again in the new
+context: measured at **174 s** for the first table-typed call, against 0.001 s
+once compiled. Nothing here benefits from specialization, since both arguments
+are immediately converted to matrices.
 """
 function compute_cost(
     model::Model,
-    X::Matrix{<:Real},
-    Y_dict::Dict{<:Forecast,<:Vector},
+    @nospecialize(X),
+    @nospecialize(Y),
     with_gradients::Bool = false,
     aggregate::Bool = true,
 )
-    return compute_cost(
-        model,
-        X,
-        _dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
-        with_gradients,
-        aggregate,
-    )
+    # reading the containers needs the forecast variables and the declared
+    # schema, so the forecast model has to be set before that can happen at all
+    _assert_forecast_model_set(model)
+    Xm, Ym = _to_matrices(X, Y, model.forecast)
+    return compute_cost(model, Xm, Ym, with_gradients, aggregate)
 end

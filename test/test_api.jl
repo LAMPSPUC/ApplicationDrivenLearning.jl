@@ -377,8 +377,13 @@ end
     # column order follows row_index, not insertion order
     @test ADL._dict_to_var_indexed_matrix(data, [f[2], f[1]]) ==
           [3.0 1.0; 4.0 2.0]
-    @test_throws AssertionError ADL._dict_to_var_indexed_matrix(
+    @test_throws ArgumentError ADL._dict_to_var_indexed_matrix(
         Dict(f[1] => [1.0, 2.0], f[2] => [3.0]),
+        [f[1], f[2]],
+    )
+    # a variable with no series at all is named, rather than raising a `KeyError`
+    @test_throws ArgumentError ADL._dict_to_var_indexed_matrix(
+        Dict(f[1] => [1.0, 2.0]),
         [f[1], f[2]],
     )
 end

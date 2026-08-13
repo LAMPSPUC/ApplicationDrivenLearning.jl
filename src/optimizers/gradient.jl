@@ -49,8 +49,8 @@ for the accepted `params`.
 """
 function _train_with_gradient!(
     model::Model,
-    X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
     params::Dict{Symbol,Any},
 )
     # extract params

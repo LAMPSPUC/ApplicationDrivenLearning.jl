@@ -14,8 +14,8 @@ Only the controller returns a meaningful [`Solution`](@ref). See
 """
 function _train_with_nelder_mead_mpi!(
     model::Model,
-    X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
     params::Dict{Symbol,Any},
 )
     JQM.mpi_init()

@@ -148,6 +148,115 @@ X = reshape([1 1], (2, 1)) .|> Float32
 Y = Dict(θ => [10, 20] .|> Float32)
 ```
 
+### Accepted input containers
+
+`X` and `Y` are not restricted to matrices and dictionaries. Both
+[`compute_cost`](@ref) and [`train!`](@ref) accept:
+
+  - a matrix of size `(samples, features)`;
+  - a vector, read as a single column;
+  - any **Tables.jl**-compatible table — a `DataFrame`, a `NamedTuple` of
+    vectors, a `CSV.File`, and so on;
+  - for `Y` only, a `Dict` mapping each forecast variable to its series, as
+    above.
+
+The two arguments are independent, so a `DataFrame` for `X` and a `Dict` for `Y`
+is fine. So the example above could equally be written:
+
+```julia
+using DataFrames
+X = DataFrame(ones = Float32[1, 1])
+Y = DataFrame(θ = Float32[10, 20])
+
+# a table is read by its column names, so say which column is the input
+ApplicationDrivenLearning.set_forecast_model(model, nn; input_names = [:ones])
+```
+
+#### How columns are matched
+
+One rule covers both arguments:
+
+> **A named container is matched by name; an unnamed container is matched by
+> position. Neither is ever guessed at.**
+
+An array carries no column names, so position is its only possible reading. A
+table's columns *are* named, and those names are what gets used — so reordering
+the columns of a `DataFrame` cannot change your results, and extra columns (an id
+or a date, say) are ignored. If the names cannot be matched, you get an error
+rather than a silent fallback to column order, which is how you would otherwise
+end up training against the wrong series without any warning.
+
+`Matrix(df)` is how you ask for positional matching, and reads as exactly that
+request: it drops the names.
+
+The names a table is matched against are the ones the model declares:
+
+  - **`Y`** uses the names of the forecast variables. `@variable(model, θ,
+    Forecast)` reads a `θ` column with nothing to configure. Container
+    declarations like `@variable(model, θ[1:2], Forecast)` name their variables
+    `θ[1]` and `θ[2]`, which no table is likely to carry, so pass
+    `output_names = [:demand, :price]` to [`set_forecast_model`](@ref) — or use
+    the `Dict` form, which is keyed by the variables themselves.
+  - **`X`** uses `input_names`, either declared directly or implied by writing
+    the `input_output_map` with `Symbol` keys:
+
+```julia
+# declared directly, for a single network applied to the whole input
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    Chain(Dense(2 => 1));
+    input_names = [:temp, :hour],
+)
+
+# or implied, by naming the inputs in the map itself, where each network
+# reads its own columns
+PredictiveModel(
+    [Dense(2 => 1), Dense(1 => 1)],
+    [Dict([:temp, :hour] => [demand]), Dict([:price] => [spill])],
+)
+```
+
+There is no exception for a table with a single column, which is why the
+`DataFrame` version of this tutorial's data declares `input_names` above. Its
+order cannot be wrong, but its *name* still can: a one-input model handed a
+`humidity` column when it wanted `temp` is a mistake worth catching, and only a
+declared schema catches it. `Y` needs nothing extra there, since
+`@variable(model, θ, Forecast)` already names its own column.
+
+#### How rows are matched
+
+The same rule extends one dimension further. By default `X` and `Y` are lined up
+by row order, and nothing checks that row `t` of one is the same observation as
+row `t` of the other — only that they have the same number of rows. Naming the
+column that identifies an observation fixes that:
+
+```julia
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    nn;
+    input_names = [:ones],
+    sample_key = :timestamp,
+)
+
+X = DataFrame(timestamp = [10, 20, 30], ones = Float32[1, 1, 1])
+Y = DataFrame(timestamp = [30, 10, 20], θ = Float32[30, 10, 20])  # any order
+```
+
+The realized values are then looked up by key for each row of `X`, so `Y` may
+arrive in any order, and `Y` may hold samples that `X` does not ask for — the
+row-wise counterpart of ignoring an unwanted column. A sample that `X` asks for
+and `Y` lacks is an error rather than a silent off-by-one, and a key that repeats
+is rejected because it cannot identify a sample.
+
+`X` fixes the order, since that is the order the returned per-sample costs and
+gradients are in. The key column is not a feature: it identifies a row, so it is
+never fed to the network. And as on the column side, a container that carries no
+row labels — a matrix, or the `Dict` form of `Y` — falls back to order.
+
+Columns must be numeric. A column of strings, or one containing `missing`, is
+rejected with an error naming the offending argument rather than failing later
+inside the solver.
+
 
 A simple forecast model with only one parameter can be defined as a `Flux.Dense` layer with just 1 weight and no bias. We can associate the predictive model with our ApplicationDrivenLearning model only if its output size matches the number of declared forecast variables.
 
