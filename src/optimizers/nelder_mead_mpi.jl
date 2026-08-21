@@ -82,3 +82,19 @@ function _train_with_nelder_mead_mpi!(
 
     return Solution(final_cost, final_sol)
 end
+
+"""
+    _train!(::Type{NelderMeadMPIMode}, model, X, Y, params)
+
+Dispatch entry point for [`NelderMeadMPIMode`](@ref); see
+[`_train_with_nelder_mead_mpi!`](@ref).
+"""
+function _train!(
+    ::Type{NelderMeadMPIMode},
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    params::Dict{Symbol,Any},
+)
+    return _train_with_nelder_mead_mpi!(model, X, Y, params)
+end
