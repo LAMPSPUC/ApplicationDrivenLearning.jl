@@ -198,8 +198,8 @@ function Base.print(io::IO, model::Model)
     if isnothing(model.forecast)
         println(io, "Not defined.")
     else
-        for network in model.forecast.networks
-            println(io, network)
+        for unit in model.forecast.units
+            println(io, unit.architecture)
         end
     end
     return

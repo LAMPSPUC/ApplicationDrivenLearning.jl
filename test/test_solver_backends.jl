@@ -48,8 +48,11 @@ function _convex_model()
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> 5 * ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> 5 * ones(s...)),
+            ),
+            outputs = [d],
         ),
     )
     return m
@@ -92,10 +95,11 @@ function _infeasible_at_negative_model()
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(
+        ADL.ForecastModel(
+            architecture = Chain(
                 Dense(1 => 1; bias = false, init = (s...) -> 0.5 * ones(s...)),
             ),
+            outputs = [d],
         ),
     )
     return m
@@ -141,13 +145,26 @@ function _backend_model()
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            [
-                Dense(2 => 1; init = (s...) -> [0.6 0.3], bias = [1.0]),
-                Dense(1 => 1; init = (s...) -> fill(0.4, s...), bias = [0.5]),
-            ],
-            [Dict([1, 2] => [d1]), Dict([1] => [d2])],
-        ),
+        [
+            ADL.ForecastModel(
+                inputs = [1, 2],
+                architecture = Dense(
+                    2 => 1;
+                    init = (s...) -> [0.6 0.3],
+                    bias = [1.0],
+                ),
+                outputs = [d1],
+            ),
+            ADL.ForecastModel(
+                inputs = [1],
+                architecture = Dense(
+                    1 => 1;
+                    init = (s...) -> fill(0.4, s...),
+                    bias = [0.5],
+                ),
+                outputs = [d2],
+            ),
+        ],
     )
     return m
 end
@@ -499,8 +516,11 @@ end
     set_silent(u)
     ADL.set_forecast_model(
         u,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d],
         ),
     )
     err_u = try

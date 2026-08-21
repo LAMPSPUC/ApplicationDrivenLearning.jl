@@ -10,7 +10,8 @@ here, and may change without a breaking release.
 
 ```@docs
 Model
-PredictiveModel
+ForecastModel
+FullForecastModel
 Plan
 Assess
 ```

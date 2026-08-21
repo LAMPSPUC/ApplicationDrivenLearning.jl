@@ -214,9 +214,10 @@ function _with_evaluator(
     function evaluate(θ, batch::SampleBatch; with_gradients::Bool = false)
         apply_params(model.forecast, θ)
         if with_gradients
-            return compute_cost(model, batch.X, batch.Y, true)
+            return _compute_cost_on_matrices(model, batch.X, batch.Y, true)
         end
-        return compute_cost(model, batch.X, batch.Y, false), nothing
+        return _compute_cost_on_matrices(model, batch.X, batch.Y, false),
+        nothing
     end
     return body(evaluate)
 end

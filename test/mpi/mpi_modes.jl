@@ -67,8 +67,11 @@ function newsvendor_model(w0::Float64)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> fill(w0, s))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> fill(w0, s)),
+            ),
+            outputs = [d],
         ),
     )
     return m, d

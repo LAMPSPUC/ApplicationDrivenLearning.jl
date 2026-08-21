@@ -48,10 +48,11 @@ best_cost = (c - q) * y
 @testset "Newsvendor BilevelMode" begin
     ApplicationDrivenLearning.set_forecast_model(
         model,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(
                 Dense(1 => 1; bias = false, init = (size...) -> rand(size...)),
             ),
+            outputs = [d],
         ),
     )
     opt = ApplicationDrivenLearning.Options(
@@ -132,7 +133,10 @@ function _biased_newsvendor(; bounded::Bool = false, trailing_identity = false)
     layers = trailing_identity ? (Dense(1 => 1), identity) : (Dense(1 => 1),)
     ApplicationDrivenLearning.set_forecast_model(
         m,
-        ApplicationDrivenLearning.PredictiveModel(Chain(layers...) |> f64),
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(layers...) |> f64,
+            outputs = [d],
+        ),
     )
     return m, d
 end
@@ -165,7 +169,7 @@ end
 
     # the bias really was solved for and written back, not left at its
     # initialization: prediction must interpolate both samples
-    layer = mb.forecast.networks[1][1]
+    layer = mb.forecast.units[1].architecture[1]
     @test only(layer.weight) ≈ 10.0 atol = 1e-2
     @test only(layer.bias) ≈ 40.0 atol = 1e-2
     @test vec(mb.forecast(Xb')) ≈ [50.0, 60.0] atol = 1e-2
@@ -194,8 +198,9 @@ end
     mb, db = _biased_newsvendor()
     ApplicationDrivenLearning.set_forecast_model(
         mb,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(Dense(1 => 1), Dropout(0.5)) |> f64,
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(Dense(1 => 1), Dropout(0.5)) |> f64,
+            outputs = [db],
         ),
     )
     err = try
@@ -218,10 +223,11 @@ end
 @testset "Newsvendor OptimMode" begin
     ApplicationDrivenLearning.set_forecast_model(
         model,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(
                 Dense(1 => 1; bias = false, init = (size...) -> rand(size...)),
             ),
+            outputs = [d],
         ),
     )
     opt = ApplicationDrivenLearning.Options(
@@ -239,10 +245,11 @@ end
 @testset "Newsvendor GradientMode" begin
     ApplicationDrivenLearning.set_forecast_model(
         model,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(
                 Dense(1 => 1; bias = false, init = (size...) -> rand(size...)),
             ),
+            outputs = [d],
         ),
     )
     opt = ApplicationDrivenLearning.Options(

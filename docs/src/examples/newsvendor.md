@@ -84,9 +84,14 @@ end)
 set_optimizer(model, Gurobi.Optimizer)
 set_silent(model)
 
-# forecast model
-pred = Flux.Dense(1 => 2, exp)
-ADL.set_forecast_model(model, ADL.PredictiveModel(pred))
+# forecast model: one architecture producing both demands
+ADL.set_forecast_model(
+    model,
+    ADL.ForecastModel(
+        architecture = Flux.Dense(1 => 2, exp),
+        outputs = [d[1], d[2]],
+    ),
+)
 ```
 
 Then, we can initialize the data, referencing forecast variables.

@@ -74,9 +74,11 @@ addprocs(2; exeflags = `--project=$(Base.active_project()) $(coverage_flag())`)
     set_silent(m)
     ApplicationDrivenLearning.set_forecast_model(
         m,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(Dense(n_in => 1; bias = false, init = (s...) -> fill(w0, s)));
-            output_names = [:demand],
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(
+                Dense(n_in => 1; bias = false, init = (s...) -> fill(w0, s)),
+            ),
+            outputs = [d => :demand],
         ),
     )
     return m, d
@@ -436,15 +438,15 @@ ADL.train!(
             end
             ApplicationDrivenLearning.set_forecast_model(
                 m2,
-                ApplicationDrivenLearning.PredictiveModel(
-                    Chain(
+                ApplicationDrivenLearning.ForecastModel(
+                    architecture = Chain(
                         Dense(
                             1 => 1;
                             bias = false,
                             init = (s...) -> ones(s...),
                         ),
-                    );
-                    output_names = [:demand],
+                    ),
+                    outputs = [d => :demand],
                 ),
             )
             return m2
