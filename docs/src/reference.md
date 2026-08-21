@@ -32,11 +32,26 @@ ApplicationDrivenLearning.Solution
 ## Modes
 
 ```@docs
-ApplicationDrivenLearning.NelderMeadMode
+ApplicationDrivenLearning.OptimMode
+ApplicationDrivenLearning.NLoptMode
 ApplicationDrivenLearning.GradientMode
+ApplicationDrivenLearning.BilevelMode
+```
+## Deprecated Modes
+
+```@docs
+ApplicationDrivenLearning.NelderMeadMode
 ApplicationDrivenLearning.NelderMeadMPIMode
 ApplicationDrivenLearning.GradientMPIMode
-ApplicationDrivenLearning.BilevelMode
+```
+
+## Parallel backends
+
+```@docs
+ApplicationDrivenLearning.AbstractParallelBackend
+ApplicationDrivenLearning.SerialBackend
+ApplicationDrivenLearning.MPIBackend
+ApplicationDrivenLearning.DistributedBackend
 ```
 
 ## Attributes getters and setters

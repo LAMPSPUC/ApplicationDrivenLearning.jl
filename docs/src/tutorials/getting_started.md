@@ -15,6 +15,7 @@ using JuMP
 using Flux
 import HiGHS
 using ApplicationDrivenLearning
+using Optim
 
 # main model and policy / forecast variables
 model = ApplicationDrivenLearning.Model()
@@ -55,7 +56,7 @@ Y = Dict(θ => [10, 20] .|> Float32)
 
 # forecast model
 nn = Chain(Dense(1 => 1; bias=false))
-ApplicationDrivenLearning.set_forecast_model(model, nn)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn))
 
 # training the full model
 solution = ApplicationDrivenLearning.train!(
@@ -63,7 +64,8 @@ solution = ApplicationDrivenLearning.train!(
     X,
     Y,
     ApplicationDrivenLearning.Options(
-        ApplicationDrivenLearning.NelderMeadMode
+        ApplicationDrivenLearning.OptimMode;
+        algorithm = Optim.NelderMead(),
     )
 )
 
@@ -82,6 +84,7 @@ Once installed, the necessary packages can be loaded into julia:
 using JuMP
 using Flux
 using ApplicationDrivenLearning
+using Optim
 ```
 
 We have to include a solver for solving the optimization models. In this case, we load HiGHS:
@@ -169,7 +172,7 @@ X = DataFrame(ones = Float32[1, 1])
 Y = DataFrame(θ = Float32[10, 20])
 
 # a table is read by its column names, so say which column is the input
-ApplicationDrivenLearning.set_forecast_model(model, nn; input_names = [:ones])
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn; input_names = [:ones]))
 ```
 
 #### How columns are matched
@@ -202,11 +205,7 @@ The names a table is matched against are the ones the model declares:
 
 ```julia
 # declared directly, for a single network applied to the whole input
-ApplicationDrivenLearning.set_forecast_model(
-    model,
-    Chain(Dense(2 => 1));
-    input_names = [:temp, :hour],
-)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(Chain(Dense(2 => 1)); input_names = [:temp, :hour]))
 
 # or implied, by naming the inputs in the map itself, where each network
 # reads its own columns
@@ -231,12 +230,7 @@ row `t` of the other — only that they have the same number of rows. Naming the
 column that identifies an observation fixes that:
 
 ```julia
-ApplicationDrivenLearning.set_forecast_model(
-    model,
-    nn;
-    input_names = [:ones],
-    sample_key = :timestamp,
-)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn; input_names = [:ones], sample_key = :timestamp))
 
 X = DataFrame(timestamp = [10, 20, 30], ones = Float32[1, 1, 1])
 Y = DataFrame(timestamp = [30, 10, 20], θ = Float32[30, 10, 20])  # any order
@@ -262,10 +256,10 @@ A simple forecast model with only one parameter can be defined as a `Flux.Dense`
 
 ```julia
 nn = Chain(Dense(1 => 1; bias=false))
-ApplicationDrivenLearning.set_forecast_model(model, nn)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn))
 ```
 
-Finally, the full model is trained using the `NelderMeadMode`. This mode relies on the `Optim` package, which is already a dependency of ApplicationDrivenLearning, so it does not need to be installed or loaded separately.
+Finally, the full model is trained with [`OptimMode`](modes.md#Optim-mode), which reaches any algorithm from the `Optim` package — here Nelder-Mead. `Optim` is already a dependency of ApplicationDrivenLearning, so it does not need to be installed, but it does need `using Optim` to name the algorithm.
 
 ```julia
 solution = ApplicationDrivenLearning.train!(
@@ -273,7 +267,8 @@ solution = ApplicationDrivenLearning.train!(
     X,
     Y,
     ApplicationDrivenLearning.Options(
-        ApplicationDrivenLearning.NelderMeadMode
+        ApplicationDrivenLearning.OptimMode;
+        algorithm = Optim.NelderMead(),
     )
 )
 ```

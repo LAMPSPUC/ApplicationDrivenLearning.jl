@@ -1,4 +1,5 @@
 ADL = ApplicationDrivenLearning
+using DataFrames
 
 @testset "Options validation" begin
     opt = ADL.Options(ADL.GradientMode; epochs = 5)
@@ -169,8 +170,11 @@ end
 @testset "set_forecast_model size check" begin
     m = ADL.Model()
     @variable(m, f[1:2], ADL.Forecast)
-    @test_throws AssertionError ADL.set_forecast_model(m, Flux.Dense(1 => 3))
-    ADL.set_forecast_model(m, Flux.Dense(1 => 2))
+    @test_throws AssertionError ADL.set_forecast_model(
+        m,
+        ADL.PredictiveModel(Flux.Dense(1 => 3)),
+    )
+    ADL.set_forecast_model(m, ADL.PredictiveModel(Flux.Dense(1 => 2)))
     @test m.forecast.output_variables == m.forecast_vars
 end
 
@@ -208,7 +212,9 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
     Xc = reshape([10.0, 20.0], 2, 1)
     Yc = Dict(d => [10.0, 20.0])
@@ -227,22 +233,73 @@ end
     @test_throws ArgumentError ADL.compute_cost(m2, Xc, reshape(Yc[d], 2, 1))
 end
 
+@testset "train! accepts a model or a function that builds one" begin
+    # The builder form exists for `DistributedBackend`, whose workers cannot be
+    # sent a model - but it works with every backend, and is the natural way to
+    # describe a run once with one function.
+    Xt = ones(1, 1)
+    build() = begin
+        m, _ = _build_newsvendor()
+        ADL.set_forecast_model(
+            m,
+            ADL.PredictiveModel(
+                Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
+                output_names = [:demand],
+            ),
+        )
+        return m
+    end
+    opt() = ADL.Options(
+        ADL.OptimMode,
+        algorithm = Optim.NelderMead(),
+        iterations = 60,
+        show_trace = false,
+    )
+    Yt = DataFrame(demand = [50.0])
+
+    from_builder = ADL.train!(build, Xt, Yt, opt())
+    from_model = ADL.train!(build(), Xt, Yt, opt())
+    @test from_builder.cost ≈ from_model.cost atol = 1e-6
+    @test from_builder.params ≈ from_model.params atol = 1e-6
+
+    # a builder that does not return a model says so, rather than failing later
+    # somewhere inside the trainer
+    err = try
+        ADL.train!(() -> 42, Xt, Yt, opt())
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("must return an", err.msg)
+    @test occursin("Int", err.msg)          # names what it got
+end
+
 @testset "train! accepts a matrix or a dictionary for Y" begin
     Xt = ones(1, 1)
     Yvec = [50.0]
-    opt() = ADL.Options(ADL.NelderMeadMode, iterations = 60, show_trace = false)
+    opt() = ADL.Options(
+        ADL.OptimMode,
+        algorithm = Optim.NelderMead(),
+        iterations = 60,
+        show_trace = false,
+    )
 
     m_dict, d_dict = _build_newsvendor()
     ADL.set_forecast_model(
         m_dict,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
     sol_dict = ADL.train!(m_dict, Xt, Dict(d_dict => Yvec), opt())
 
     m_mat, _ = _build_newsvendor()
     ADL.set_forecast_model(
         m_mat,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
     sol_mat = ADL.train!(m_mat, Xt, reshape(Yvec, 1, 1), opt())
 
@@ -262,13 +319,20 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
     sol = ADL.train!(
         m,
         ones(1, 1),
         Dict(d => [50.0]),
-        ADL.Options(ADL.NelderMeadMode, iterations = 30, show_trace = false),
+        ADL.Options(
+            ADL.OptimMode,
+            algorithm = Optim.NelderMead(),
+            iterations = 30,
+            show_trace = false,
+        ),
     )
     @test sol isa ADL.Solution
     @test isconcretetype(typeof(sol.cost))
@@ -283,7 +347,9 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
     Xb = ones(1, 1)
     Yb = Dict(d => [50.0])
@@ -311,18 +377,31 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> 0.5 .* ones(s...))),
+        ADL.PredictiveModel(
+            Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> 0.5 .* ones(s...)),
+            ),
+        ),
     )
     Xn = ones(1, 1)
     Yn = Dict(d => [50.0])
-    opt = ADL.Options(ADL.NelderMeadMode, iterations = 50, show_trace = false)
+    opt = ADL.Options(
+        ADL.OptimMode,
+        algorithm = Optim.NelderMead(),
+        iterations = 50,
+        show_trace = false,
+    )
     keys_before = sort(collect(keys(opt.params)))
     sol1 = ADL.train!(m, Xn, Yn, opt)
     @test sort(collect(keys(opt.params))) == keys_before
 
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> 0.5 .* ones(s...))),
+        ADL.PredictiveModel(
+            Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> 0.5 .* ones(s...)),
+            ),
+        ),
     )
     sol2 = ADL.train!(m, Xn, Yn, opt)
     @test sol1.cost ≈ sol2.cost atol = 1e-6
@@ -330,7 +409,7 @@ end
 
 @testset "JuMP interface on ApplicationDrivenLearning.Model" begin
     m, d = _build_newsvendor()
-    ADL.set_forecast_model(m, Chain(Dense(1 => 1)))
+    ADL.set_forecast_model(m, ADL.PredictiveModel(Chain(Dense(1 => 1))))
 
     @test JuMP.objective_sense(m) == MOI.MIN_SENSE
     @test JuMP.num_variables(m) ==

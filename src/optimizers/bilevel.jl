@@ -15,6 +15,16 @@ are supported.
 
 See [`BilevelMode`](@ref) for the accepted `params`.
 """
+function _train!(
+    ::Type{BilevelMode},
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    params::Dict{Symbol,Any},
+)
+    return _solve_bilevel(model, X, Y, params)
+end
+
 function _solve_bilevel(
     model::Model,
     X::AbstractMatrix{<:Real},
@@ -176,7 +186,21 @@ function _solve_bilevel(
                     layers_inpt[output_idx] = layer(layers_inpt[output_idx])
                 end
             else
-                println("Network $ipred layer $i_layer type not supported")
+                # skipping the layer would build a reformulation of a *different*
+                # network than the one being trained and solve it without ever
+                # saying so, so this has to stop rather than warn
+                throw(
+                    ArgumentError(
+                        "`BilevelMode` cannot reformulate layer $i_layer of " *
+                        "network $ipred, of type $(typeof(layer)). The bilevel " *
+                        "reformulation rebuilds the network symbolically, which " *
+                        "supports parameterised layers and plain functions " *
+                        "applied elementwise. Train this model with " *
+                        "`GradientMode`, `OptimMode` or `NLoptMode` instead, " *
+                        "which call the network directly and so accept any " *
+                        "layer.",
+                    ),
+                )
             end
             i_layer += 1
         end
@@ -220,20 +244,4 @@ function _solve_bilevel(
         objective_value(bilevel_model),
         extract_params(model.forecast),
     )
-end
-
-"""
-    _train!(::Type{BilevelMode}, model, X, Y, params)
-
-Dispatch entry point for [`BilevelMode`](@ref); see
-[`_solve_bilevel`](@ref).
-"""
-function _train!(
-    ::Type{BilevelMode},
-    model::Model,
-    X::AbstractMatrix{<:Real},
-    Y::AbstractMatrix{<:Real},
-    params::Dict{Symbol,Any},
-)
-    return _solve_bilevel(model, X, Y, params)
 end

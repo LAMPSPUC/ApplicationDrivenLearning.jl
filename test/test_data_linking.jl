@@ -75,7 +75,9 @@ _identity_1x1(s...) = ones(s...)
     set_silent(model)
     ADL.set_forecast_model(
         model,
-        Chain(Dense(2 => 2; bias = false, init = _identity_2x2)),
+        ADL.PredictiveModel(
+            Chain(Dense(2 => 2; bias = false, init = _identity_2x2)),
+        ),
     )
 
     # two Policy, two Forecast, in declaration order
@@ -140,7 +142,9 @@ end
     set_silent(model)
     ADL.set_forecast_model(
         model,
-        Chain(Dense(2 => 2; bias = false, init = _identity_2x2)),
+        ADL.PredictiveModel(
+            Chain(Dense(2 => 2; bias = false, init = _identity_2x2)),
+        ),
     )
 
     X = [
@@ -198,8 +202,10 @@ end
     # `load_a` and `load_b` already name their own columns.
     ADL.set_forecast_model(
         model,
-        Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
-        input_names = [:temp, :wind],
+        ADL.PredictiveModel(
+            Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
+            input_names = [:temp, :wind],
+        ),
     )
     @test model.forecast.input_names == [:temp, :wind]
     @test isnothing(model.forecast.output_names)
@@ -284,15 +290,16 @@ end
             Dense(1 => 1; bias = false, init = _identity_1x1),
             Dense(1 => 1; bias = false, init = _identity_1x1),
         ],
-        [Dict([:temp] => [load[1]]), Dict([:wind] => [load[2]])],
+        [Dict([:temp] => [load[1]]), Dict([:wind] => [load[2]])];
+        # the variables are called `load[1]` / `load[2]`, so name the Y columns
+        output_names = [:load_a, :load_b],
     )
     # derived from the map, alphabetically: temp is column 1, wind column 2
     @test predictive.input_names == [:temp, :wind]
     @test predictive.input_output_map[1] == Dict([1] => [load[1]])
     @test predictive.input_output_map[2] == Dict([2] => [load[2]])
 
-    # the variables are called `load[1]` / `load[2]`, so name the Y columns
-    ADL.set_forecast_model(model, predictive; output_names = [:load_a, :load_b])
+    ADL.set_forecast_model(model, predictive)
     @test [
         ADL._forecast_base_name(f) for f in model.forecast.output_variables
     ] == ["load[1]", "load[2]"]
@@ -359,9 +366,11 @@ end
     # feature: the network still takes 2 inputs, `temp` and `wind`.
     ADL.set_forecast_model(
         model,
-        Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
-        input_names = [:temp, :wind],
-        sample_key = :hour,
+        ADL.PredictiveModel(
+            Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
+            input_names = [:temp, :wind],
+            sample_key = :hour,
+        ),
     )
     @test model.forecast.input_size == 2
     @test model.forecast.sample_key == :hour
@@ -429,9 +438,11 @@ end
     # clashing with the ones above; it lets this model read the very same tables
     ADL.set_forecast_model(
         unkeyed,
-        Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
-        input_names = [:temp, :wind],
-        output_names = [:load_a, :load_b],
+        ADL.PredictiveModel(
+            Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
+            input_names = [:temp, :wind],
+            output_names = [:load_a, :load_b],
+        ),
     )
     off_by_one = ADL.compute_cost(
         unkeyed,
