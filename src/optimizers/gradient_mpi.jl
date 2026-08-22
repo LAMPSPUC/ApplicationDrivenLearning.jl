@@ -174,3 +174,19 @@ function _train_with_gradient_mpi!(
 
     return Solution(best_C, best_θ)
 end
+
+"""
+    _train!(::Type{GradientMPIMode}, model, X, Y, params)
+
+Dispatch entry point for [`GradientMPIMode`](@ref); see
+[`_train_with_gradient_mpi!`](@ref).
+"""
+function _train!(
+    ::Type{GradientMPIMode},
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    params::Dict{Symbol,Any},
+)
+    return _train_with_gradient_mpi!(model, X, Y, params)
+end

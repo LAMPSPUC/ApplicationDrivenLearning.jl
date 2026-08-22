@@ -135,3 +135,19 @@ function _train_with_gradient!(
 
     return Solution(best_C, best_θ)
 end
+
+"""
+    _train!(::Type{GradientMode}, model, X, Y, params)
+
+Dispatch entry point for [`GradientMode`](@ref); see
+[`_train_with_gradient!`](@ref).
+"""
+function _train!(
+    ::Type{GradientMode},
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    params::Dict{Symbol,Any},
+)
+    return _train_with_gradient!(model, X, Y, params)
+end

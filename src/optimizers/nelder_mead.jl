@@ -47,3 +47,19 @@ function _train_with_nelder_mead!(
     final_cost = Optim.minimum(res)
     return Solution(final_cost, final_sol)
 end
+
+"""
+    _train!(::Type{NelderMeadMode}, model, X, Y, params)
+
+Dispatch entry point for [`NelderMeadMode`](@ref); see
+[`_train_with_nelder_mead!`](@ref).
+"""
+function _train!(
+    ::Type{NelderMeadMode},
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    params::Dict{Symbol,Any},
+)
+    return _train_with_nelder_mead!(model, X, Y, params)
+end
