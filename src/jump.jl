@@ -34,6 +34,8 @@ function JuMP.add_variable(model::Model, policy_info::_PolicyInfo, name::String)
         ),
     )
     push!(model.policy_vars, policy)
+    push!(model._plan_policy_vars, policy.plan)
+    push!(model._assess_policy_vars, policy.assess)
     return policy
 end
 
@@ -93,6 +95,8 @@ function JuMP.add_variable(
     end
 
     push!(model.forecast_vars, forecast)
+    push!(model._plan_forecast_vars, forecast.plan)
+    push!(model._assess_forecast_vars, forecast.assess)
     return forecast
 end
 
@@ -152,14 +156,12 @@ JuMP.object_dictionary(model::Model) = model.obj_dict
     JuMP.set_optimizer(model::ApplicationDrivenLearning.Model, builder)
 
 Set the solver used by both inner models. The plan model is wrapped in a
-`DiffOpt.diff_optimizer` with ParametricOptInterface enabled, so that it can
-be differentiated with respect to the forecast parameters; the assess model
-uses `builder` directly.
+`DiffOpt.diff_optimizer`, so that it can be differentiated with respect to the
+forecast parameters; the assess model uses `builder` directly.
 """
 function JuMP.set_optimizer(model::Model, builder)
     # set diffopt optimizer for plan model
-    new_diff_optimizer =
-        DiffOpt.diff_optimizer(builder; with_parametric_opt_interface = true)
+    new_diff_optimizer = DiffOpt.diff_optimizer(builder)
     JuMP.set_optimizer(model.plan, () -> new_diff_optimizer)
 
     # basic setting for assess model
@@ -169,8 +171,9 @@ function JuMP.set_optimizer(model::Model, builder)
 end
 
 function JuMP.set_silent(model::Model)
-    MOI.set(model.plan, MOI.Silent(), true)
-    return MOI.set(model.assess, MOI.Silent(), true)
+    JuMP.set_silent(model.plan)
+    JuMP.set_silent(model.assess)
+    return
 end
 
 function JuMP.num_constraints(

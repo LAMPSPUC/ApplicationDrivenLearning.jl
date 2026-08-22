@@ -42,7 +42,7 @@ With `-n 4` there is one controller and three workers.
     Defaults to `true`. Set it to `false` when you want to run several `train!`
     calls (or other MPI work) in the same process.
   - Any other argument accepted by `Optim.Options`, such as `iterations`,
-    `time_limit` and `g_tol`, can be passed directly.
+    `time_limit` and `g_abstol`, can be passed directly.
 
 Unlike [`NelderMeadMode`](modes.md#Nelder-Mead-mode), this mode does not accept
 the `initial_simplex` and `parameters` arguments; the default `Optim.NelderMead`
