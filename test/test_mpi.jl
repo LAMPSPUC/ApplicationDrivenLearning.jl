@@ -20,18 +20,6 @@ function mpi_nprocs()
     return max(2, min(n, max(2, Sys.CPU_THREADS)))
 end
 
-"""
-Propagate the parent's `--code-coverage` setting to the MPI ranks, so that the
-distributed optimizers show up in the coverage report instead of appearing
-dead. Each rank writes its own `<file>.<pid>.cov`, so the ranks do not clash.
-"""
-function coverage_flag()
-    level = Base.JLOptions().code_coverage
-    level == 1 && return `--code-coverage=user`
-    level == 2 && return `--code-coverage=all`
-    return ``
-end
-
 @testset "MPI training modes" begin
     nprocs = mpi_nprocs()
     project = dirname(Base.active_project())

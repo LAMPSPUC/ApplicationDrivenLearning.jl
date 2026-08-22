@@ -30,7 +30,7 @@ input_output_map = Dict(
     [2, 3] => [demand[2]] # input indexes 2 and 3 map to 2nd forecast variable
 )
 predictive = PredictiveModel(dem_forecast, input_output_map)
-ApplicationDrivenLearning.set_forecast_model(model, predictive)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(predictive))
 ```
 
 ### Naming the inputs
@@ -46,7 +46,7 @@ input_output_map = Dict(
     [:temp_2, :weekday] => [demand[2]],
 )
 predictive = PredictiveModel(dem_forecast, input_output_map)
-ApplicationDrivenLearning.set_forecast_model(model, predictive)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(predictive))
 
 using DataFrames
 X = DataFrame(temp_1 = [76, 89], temp_2 = [72, 85], weekday = [2, 3])
@@ -98,5 +98,5 @@ input_output_map = [
     ), # input index 4 is used to compute both price forecast vars with 2nd Flux.Dense object
 ]
 predictive = PredictiveModel(forecast_objs, input_output_map)
-ApplicationDrivenLearning.set_forecast_model(model, predictive)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(predictive))
 ```

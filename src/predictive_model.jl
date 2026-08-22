@@ -552,15 +552,73 @@ function apply_gradient!(
     X::AbstractMatrix{<:Real},
     opt_state,
 )
-    surrogate_loss(m, X) = sum(dCdy' .* m(X')) / size(X, 1)
-    grad = @timeit_debug _TIMER "zygote_backward" Zygote.gradient(
-        surrogate_loss,
-        model,
-        X,
-    )[1]
+    grad = _parameter_gradient(model, dCdy, X)
     return @timeit_debug _TIMER "optimiser_update" Optimisers.update!(
         opt_state,
         model,
         grad,
     )
+end
+
+"""
+    _parameter_gradient(model::PredictiveModel, dCdy, X)
+
+Gradient of the assessed cost with respect to the model parameters, as a
+structure mirroring `model`.
+
+The surrogate loss is the one described on [`apply_gradient!`](@ref): its
+parameter-gradient equals the chain-rule term `(1/T) Σₜ (dC/dŷₜ)·(dŷₜ/dθ)`, so
+the result is `dC/dθ` for the *mean* cost over the `T` samples — matching what
+`compute_cost` returns with `aggregate = true`.
+"""
+function _parameter_gradient(
+    model::PredictiveModel,
+    dCdy::AbstractMatrix{<:Real},
+    X::AbstractMatrix{<:Real},
+)
+    surrogate_loss(m, X) = sum(dCdy' .* m(X')) / size(X, 1)
+    return @timeit_debug _TIMER "zygote_backward" Zygote.gradient(
+        surrogate_loss,
+        model,
+        X,
+    )[1]
+end
+
+"""
+    _flat_parameter_gradient(model::PredictiveModel, dCdy, X)
+
+Gradient of the assessed cost with respect to the parameters, as a *flat vector*
+laid out exactly as [`extract_params`](@ref) lays out the parameters.
+
+That correspondence is load-bearing: `Optim` and NLopt take `θ` and `g` as
+parallel vectors and cannot notice a permutation between them, so a mismatch
+would not error — it would train towards the wrong place.
+
+It is therefore obtained by construction rather than by assumption.
+`Optimisers.destructure` returns `(flat, re)` where `re` rebuilds the model from
+a flat vector; differentiating `θ -> loss(re(θ))` yields a gradient in exactly
+`flat`'s layout, whatever that layout happens to be, because the same `re`
+defines both directions.
+
+The tempting alternative — walk the model's `trainables` and the gradient's
+`trainables` side by side — is wrong, and silently so. A gradient is a plain
+nested `NamedTuple` mirror with no `Flux.trainable` method of its own, so
+`trainables` keeps leaves the model excludes: for a `Dense` the mirror yields
+three arrays (`weight`, `bias`, `σ`) against the model's two.
+
+What still has to hold is that `destructure`'s layout agrees with
+`extract_params`'; both walk per network, then per trainable leaf, then `vec`,
+and `test/test_solver_backends.jl` pins the equality.
+"""
+function _flat_parameter_gradient(
+    model::PredictiveModel,
+    dCdy::AbstractMatrix{<:Real},
+    X::AbstractMatrix{<:Real},
+)
+    flat, re = Optimisers.destructure(model)
+    surrogate_loss(θ) = sum(dCdy' .* re(θ)(X')) / size(X, 1)
+    return @timeit_debug _TIMER "zygote_backward_flat" Zygote.gradient(
+        surrogate_loss,
+        flat,
+    )[1]
 end

@@ -8,7 +8,10 @@ end)
 @objective(ApplicationDrivenLearning.Assess(model), Min, x.assess)
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
-ApplicationDrivenLearning.set_forecast_model(model, Chain(Dense(1 => 1)))
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    ApplicationDrivenLearning.PredictiveModel(Chain(Dense(1 => 1))),
+)
 X = Float32.(ones(1, 1))
 Y = Dict(d => Float32.(ones(1)))
 
@@ -81,20 +84,23 @@ function _sgd_newsvendor(c_s = 1.0, q_s = 3.0, r_s = 0.0)
     set_silent(m)
     ApplicationDrivenLearning.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ApplicationDrivenLearning.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
     return m, d
 end
 
 @testset "GradientMode Stochastic Batches" begin
-    # The stochastic branch of `_train_with_gradient!` and the whole of
-    # `_stochastic_compute` are otherwise only reached from the `mpiexec`
-    # subprocess in test_mpi.jl, which is skipped whenever ADL_SKIP_MPI_TESTS
-    # is set and never reports coverage.
+    # The stochastic branch of the gradient loop is otherwise only reached from
+    # the `mpiexec` subprocess in test_mpi.jl, which is skipped whenever
+    # ADL_SKIP_MPI_TESTS is set and never reports coverage.
     c_s, q_s = 1.0, 3.0
 
-    # `_stochastic_compute` must take its gradient from the batch and, when
-    # asked for the full cost, its cost from the whole dataset.
+    # The loop must take its gradient from the batch and, when asked for the full
+    # cost, its cost from the whole dataset. Both come from the two `evaluate`
+    # calls the stochastic branch makes, so they are exercised here directly -
+    # which also covers the serial `_with_evaluator`.
     ms, _ = _sgd_newsvendor(c_s, q_s)
 
     # θ₀ = 1 and no bias, so ŷ_t = x_t. Samples 1 and 2 understock
@@ -104,32 +110,29 @@ end
     Ys = reshape([9.0, 9.0, 1.0, 1.0], 4, 1)
     batch = [1, 3]
     epochx = Xs[batch, :]
+    θs = ApplicationDrivenLearning.extract_params(ms.forecast)
 
-    C_batch, dC_batch = ApplicationDrivenLearning._stochastic_compute(
+    ApplicationDrivenLearning._with_evaluator(
+        ApplicationDrivenLearning.SerialBackend(),
         ms,
         Xs,
         Ys,
-        epochx,
-        batch,
-        false,
-    )
-    # per-sample assessed costs are [-2, -4, 0, 1]
-    @test C_batch ≈ -1.0                     # mean over the batch
-    @test size(dC_batch) == (length(batch), 1)
-    # rows follow the batch, not the dataset: sample 1 understocks, 3 overstocks
-    @test vec(dC_batch) ≈ [c_s - q_s, c_s]
+    ) do evaluate
+        sub = ApplicationDrivenLearning._batch(Xs, Ys, batch)
+        @test sub.X == epochx                    # sliced from the indices given
+        C_batch, dC_batch = evaluate(θs, sub; with_gradients = true)
+        # per-sample assessed costs are [-2, -4, 0, 1]
+        @test C_batch ≈ -1.0                     # mean over the batch
+        @test size(dC_batch) == (length(batch), 1)
+        # rows follow the batch, not the dataset: 1 understocks, 3 overstocks
+        @test vec(dC_batch) ≈ [c_s - q_s, c_s]
 
-    C_full, dC_full = ApplicationDrivenLearning._stochastic_compute(
-        ms,
-        Xs,
-        Ys,
-        epochx,
-        batch,
-        true,
-    )
-    @test C_full ≈ -1.25                     # mean over the whole dataset
-    @test C_full != C_batch                  # the two really do differ here
-    @test dC_full == dC_batch                # gradient still only over the batch
+        C_full, dC_full =
+            evaluate(θs, ApplicationDrivenLearning._full_batch(Xs, Ys))
+        @test C_full ≈ -1.25                     # mean over the whole dataset
+        @test C_full != C_batch                  # the two really do differ here
+        @test isnothing(dC_full)                 # no gradient was asked for
+    end
 
     # end to end: the stochastic branch trains to the known optimum. All four
     # samples share the same demand, so the run is independent of which rows
@@ -171,6 +174,39 @@ end
         ),
     )
     @test sol_q.cost == Inf                  # no full cost was ever computed
+end
+
+@testset "SampleBatch pairing" begin
+    # The batch carries both the row indices and the matching data slices, because
+    # the serial backend reads the slices and the distributing ones ship indices.
+    # The two halves must never be assemblable independently, or an inconsistent
+    # pair would give a different answer per backend with nothing to catch it.
+    Xb = reshape([1.0, 2.0, 3.0, 4.0], 4, 1)
+    Yb = reshape([9.0, 8.0, 7.0, 6.0], 4, 1)
+
+    full = ApplicationDrivenLearning._full_batch(Xb, Yb)
+    @test full.indices == 1:4
+    @test full.X === Xb                        # the whole dataset is not copied
+    @test full.Y === Yb
+
+    sub = ApplicationDrivenLearning._batch(Xb, Yb, [3, 1, 3])
+    @test sub.indices == [3, 1, 3]             # order kept, repeats kept
+    @test vec(sub.X) == [3.0, 1.0, 3.0]
+    @test vec(sub.Y) == [7.0, 9.0, 7.0]
+    @test sub.X !== Xb                          # a batch slice is a copy
+
+    # the unsliced data alongside a batch of indices is the mistake being prevented
+    @test_throws DimensionMismatch ApplicationDrivenLearning.SampleBatch(
+        [1, 2],
+        Xb,
+        Yb,
+    )
+    # ... as is slicing with the wrong indices
+    @test_throws DimensionMismatch ApplicationDrivenLearning.SampleBatch(
+        [1, 2, 3],
+        Xb[1:2, :],
+        Yb[1:2, :],
+    )
 end
 
 @testset "GradientMode Multi-Sample Gradient Correctness" begin
@@ -221,7 +257,9 @@ end
     set_silent(nv)
     ApplicationDrivenLearning.set_forecast_model(
         nv,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ApplicationDrivenLearning.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
 
     # x = [1,2,3], θ₀ = 1 ⇒ ŷ = [1,2,3]; d = [5,5,1] ⇒ samples 1,2 understock
