@@ -11,8 +11,8 @@ See [`NelderMeadMode`](@ref) for the accepted `params`; any key other than
 """
 function _train_with_nelder_mead!(
     model::Model,
-    X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
     params::Dict{Symbol,Any},
 )
 
