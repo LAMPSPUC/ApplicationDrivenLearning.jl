@@ -80,7 +80,7 @@ function Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
     end
 end
 
-include("predictive_model.jl")
+include("forecast_model.jl")
 
 # normalizes the matrix / vector / Tables.jl inputs of the public entry points
 include("data.jl")

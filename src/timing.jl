@@ -3,7 +3,7 @@
 # This file holds all of the package's coupling to TimerOutputs: the imports,
 # the timer object and the small API around it. The `@timeit_debug` sections
 # themselves live next to the code they measure, in `simulation.jl` and
-# `predictive_model.jl`.
+# `forecast_model.jl`.
 #
 # It has to be included before those files: `@timeit_debug` and `_TIMER` must be
 # resolvable when they are expanded.
