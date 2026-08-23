@@ -10,7 +10,10 @@ set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 ApplicationDrivenLearning.set_forecast_model(
     model,
-    ApplicationDrivenLearning.PredictiveModel(Chain(Dense(1 => 1))),
+    ApplicationDrivenLearning.ForecastModel(
+        architecture = Chain(Dense(1 => 1)),
+        outputs = [d],
+    ),
 )
 X = Float32.(ones(1, 1))
 Y = Dict(d => Float32.(ones(1)))
@@ -84,8 +87,11 @@ function _sgd_newsvendor(c_s = 1.0, q_s = 3.0, r_s = 0.0)
     set_silent(m)
     ApplicationDrivenLearning.set_forecast_model(
         m,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d],
         ),
     )
     return m, d
@@ -257,8 +263,11 @@ end
     set_silent(nv)
     ApplicationDrivenLearning.set_forecast_model(
         nv,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d],
         ),
     )
 

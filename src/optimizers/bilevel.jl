@@ -151,16 +151,16 @@ function _solve_bilevel(
 
     # implement predictive model expression iterating through 
     # models and layers to create predictive expression
-    npreds = size(model.forecast.networks, 1)
+    npreds = length(model.forecast.units)
     predictive_model_vars = [Dict{Int,Any}() for ipred = 1:npreds]
     y_hat = Matrix{Any}(undef, size(Y, 1), size(Y, 2))
     for ipred = 1:npreds
-        layers_inpt = Dict{Vector{Forecast},Matrix{Any}}(
-            output_idx => X[1:T, input_idx] for (input_idx, output_idx) in
-            model.forecast.input_output_map[ipred]
-        )
+        unit = model.forecast.units[ipred]
+        # one input selection per unit, so the prediction is carried through the
+        # layers as a single matrix
+        prediction = Matrix{Any}(X[1:T, unit.inputs])
         i_layer = 1
-        for layer in model.forecast.networks[ipred]
+        for layer in unit.architecture
             # if it is layer with parameters, process output
             if _has_params(layer)
                 # get size and parameters W and b
@@ -176,15 +176,10 @@ function _solve_bilevel(
                 end
                 predictive_model_vars[ipred][i_layer] = Dict(:W => W, :b => b)
                 # build layer output as next layer input
-                for output_idx in values(model.forecast.input_output_map[ipred])
-                    layers_inpt[output_idx] =
-                        layer.σ(W * layers_inpt[output_idx]' .+ b)'
-                end
+                prediction = layer.σ(W * prediction' .+ b)'
                 # if activation function layer, just apply
             elseif supertype(typeof(layer)) == Function
-                for output_idx in values(model.forecast.input_output_map[ipred])
-                    layers_inpt[output_idx] = layer(layers_inpt[output_idx])
-                end
+                prediction = layer(prediction)
             else
                 # skipping the layer would build a reformulation of a *different*
                 # network than the one being trained and solve it without ever
@@ -204,10 +199,7 @@ function _solve_bilevel(
             end
             i_layer += 1
         end
-        for (output_idx, prediction) in layers_inpt
-            y_hat[:, _find_elements_position(model.forecast_vars, output_idx)] =
-                prediction
-        end
+        y_hat[:, unit.rows] = prediction
     end
 
     # and apply prediction on lower model as constraint
@@ -227,7 +219,7 @@ function _solve_bilevel(
     # fix parameters to predictive_model
     for ipred = 1:npreds
         ilayer = 1
-        for layer in model.forecast.networks[ipred]
+        for layer in model.forecast.units[ipred].architecture
             if _has_params(layer)
                 for p in Flux.trainables(layer.weight)
                     p .= value.(predictive_model_vars[ipred][ilayer][:W])

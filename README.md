@@ -52,9 +52,14 @@ end)
 set_optimizer(model, HiGHS.Optimizer)
 set_silent(model)
 
-# forecast model
-nn = Chain(Dense(1 => 1; bias=false))
-ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn))
+# forecast model: one architecture, and the forecast variable it predicts
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    ApplicationDrivenLearning.ForecastModel(
+        architecture = Chain(Dense(1 => 1; bias=false)),
+        outputs = [θ],
+    ),
+)
 
 # data: `X` is a (samples x inputs) matrix and `Y` maps each forecast
 # variable to its vector of realized values

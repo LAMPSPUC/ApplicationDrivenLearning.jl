@@ -23,7 +23,10 @@ _timer_sections(to) = keys(TO.todict(to)["inner_timers"])
     set_silent(tmodel)
     ApplicationDrivenLearning.set_forecast_model(
         tmodel,
-        ApplicationDrivenLearning.PredictiveModel(Chain(Dense(1 => 1))),
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(Dense(1 => 1)),
+            outputs = [d],
+        ),
     )
 
     Tt = 3

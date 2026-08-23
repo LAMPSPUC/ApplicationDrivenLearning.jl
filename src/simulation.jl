@@ -173,7 +173,30 @@ function compute_cost(
     aggregate::Bool = true,
 )
     _assert_forecast_model_set(model)
+    # matrices are normalized too, rather than taken as already normalized. They
+    # need it: the units may give their `Y` columns by position, and this method
+    # is the only one a matrix reaches
+    Xm, Ym = _to_matrices(X, Y, model.forecast)
+    return _compute_cost_on_matrices(model, Xm, Ym, with_gradients, aggregate)
+end
 
+"""
+    _compute_cost_on_matrices(model, X, Y, with_gradients, aggregate)
+
+[`compute_cost`](@ref) on data that is already normalized: `X` in the declared
+input layout and `Y` in forecast-variable order.
+
+Split out from the public method so that normalization happens exactly once. The
+generic container method and the parallel backends call this directly, having
+normalized already; anything reached from user code goes through `compute_cost`.
+"""
+function _compute_cost_on_matrices(
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    with_gradients::Bool = false,
+    aggregate::Bool = true,
+)
     # data shape checks. `ArgumentError` rather than `@assert`: these validate
     # caller-supplied data, and an `@assert` is documented as removable at some
     # optimization levels, which would turn a wrong shape into a wrong answer
@@ -280,7 +303,7 @@ function compute_cost(
     # schema, so the forecast model has to be set before that can happen at all
     _assert_forecast_model_set(model)
     Xm, Ym = _to_matrices(X, Y, model.forecast)
-    return compute_cost(model, Xm, Ym, with_gradients, aggregate)
+    return _compute_cost_on_matrices(model, Xm, Ym, with_gradients, aggregate)
 end
 
 """

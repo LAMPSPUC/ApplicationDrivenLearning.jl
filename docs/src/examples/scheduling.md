@@ -46,8 +46,13 @@ end)
 @objective(ADL.Assess(model), Min, 10*y.assess + 100*under_dispatch + 20*over_dispatch)
 
 # forecast model
-predictive = Dense(1 => 1, exp; bias=false)
-ADL.set_forecast_model(model, ADL.PredictiveModel(predictive))
+ADL.set_forecast_model(
+    model,
+    ADL.ForecastModel(
+        architecture = Dense(1 => 1, exp; bias=false),
+        outputs = [y],
+    ),
+)
 ```
 
 We can check how the model performs by computing the assess cost with the initial (random) forecast model.
