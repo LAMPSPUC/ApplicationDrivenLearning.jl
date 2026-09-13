@@ -221,3 +221,19 @@ function _solve_bilevel(
         extract_params(model.forecast),
     )
 end
+
+"""
+    _train!(::Type{BilevelMode}, model, X, Y, params)
+
+Dispatch entry point for [`BilevelMode`](@ref); see
+[`_solve_bilevel`](@ref).
+"""
+function _train!(
+    ::Type{BilevelMode},
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    params::Dict{Symbol,Any},
+)
+    return _solve_bilevel(model, X, Y, params)
+end

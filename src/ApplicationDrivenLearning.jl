@@ -477,22 +477,36 @@ function train!(
     # constraint have to be in place before training starts
     _build(model)
 
-    y = Y
+    return _train!(options.mode, model, X, Y, options.params)
+end
 
-    if options.mode == NelderMeadMode
-        return _train_with_nelder_mead!(model, X, y, options.params)
-    elseif options.mode == GradientMode
-        return _train_with_gradient!(model, X, y, options.params)
-    elseif options.mode == NelderMeadMPIMode
-        return _train_with_nelder_mead_mpi!(model, X, y, options.params)
-    elseif options.mode == GradientMPIMode
-        return _train_with_gradient_mpi!(model, X, y, options.params)
-    elseif options.mode == BilevelMode
-        return _solve_bilevel(model, X, y, options.params)
-    else
-        # should never get here: Options rejects unknown modes on construction
-        throw(ArgumentError("Invalid optimization method"))
-    end
+"""
+    _train!(mode, model, X, Y, params)
+
+Run the training loop belonging to `mode`.
+
+One method per [`AbstractOptimizationMode`](@ref), defined next to the loop it
+calls rather than listed here, so that adding a mode is adding a method. This
+matters beyond tidiness: a mode implemented in a package extension can add a
+method, and cannot add a branch to an `if`.
+
+`Options` rejects unknown modes on construction, so the fallback below is only
+reachable by calling this directly - which is why it names the mode rather than
+saying that something was invalid.
+"""
+function _train!(
+    mode,
+    ::Model,
+    ::AbstractMatrix{<:Real},
+    ::AbstractMatrix{<:Real},
+    ::Dict{Symbol,Any},
+)
+    return throw(
+        ArgumentError(
+            "No training loop is defined for mode $mode. Every mode needs a " *
+            "`_train!(::Type{Mode}, model, X, Y, params)` method.",
+        ),
+    )
 end
 
 # train! with any other supported container: vectors, Tables.jl tables such as a
