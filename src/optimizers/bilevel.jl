@@ -17,8 +17,8 @@ See [`BilevelMode`](@ref) for the accepted `params`.
 """
 function _solve_bilevel(
     model::Model,
-    X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
     params::Dict{Symbol,Any},
 )
 

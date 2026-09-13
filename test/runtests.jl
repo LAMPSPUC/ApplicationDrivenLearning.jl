@@ -10,6 +10,8 @@ using Random
 Random.seed!(123)
 
 include("test_api.jl")
+include("test_data_inputs.jl")
+include("test_data_linking.jl")
 include("test_predictive_model.jl")
 include("test_newsvendor.jl")
 include("test_gradient.jl")

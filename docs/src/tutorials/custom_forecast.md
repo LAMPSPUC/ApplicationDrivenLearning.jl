@@ -33,6 +33,31 @@ predictive = PredictiveModel(dem_forecast, input_output_map)
 ApplicationDrivenLearning.set_forecast_model(model, predictive)
 ```
 
+### Naming the inputs
+
+Integer indexes are positions in `X`, so `[1, 3]` only means "temperature at
+location 1 and the weekday" as long as the columns arrive in that order. The same
+map can be written with the column names instead, which says what it means and
+lets `X` be given as a table:
+
+```julia
+input_output_map = Dict(
+    [:temp_1, :weekday] => [demand[1]],
+    [:temp_2, :weekday] => [demand[2]],
+)
+predictive = PredictiveModel(dem_forecast, input_output_map)
+ApplicationDrivenLearning.set_forecast_model(model, predictive)
+
+using DataFrames
+X = DataFrame(temp_1 = [76, 89], temp_2 = [72, 85], weekday = [2, 3])
+```
+
+The names become the model's `input_names` and are resolved to positions once, so
+nothing else changes: a `DataFrame` may now hold its columns in any order, and any
+column it is missing is reported by name. A matrix `X` is still read positionally,
+in the order of `input_names` — alphabetical unless
+`input_names = [...]` is passed to fix a different one.
+
 ## Multiple Flux models
 
 The definition of the predictive model can also be done using multiple Flux models. This supports the modular construction of predictive architectures, where specialized components are trained to forecast different aspects of the problem, without the difficulty of defining custom architectures.

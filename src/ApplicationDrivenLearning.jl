@@ -3,6 +3,7 @@ module ApplicationDrivenLearning
 using Flux
 using JuMP
 using DiffOpt
+import Tables
 import Base.*, Base.+
 
 # must come first: the files below expand `@timeit_debug` sections against the
@@ -80,6 +81,9 @@ function Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
 end
 
 include("predictive_model.jl")
+
+# normalizes the matrix / vector / Tables.jl inputs of the public entry points
+include("data.jl")
 
 """
     ApplicationDrivenLearning._PolicyFixConstraint
@@ -202,7 +206,7 @@ Return the `assess_policy_fix` constraints, which pin the assess
 assess_policy_fix_cons(model::Model) = model._assess_policy_fix
 
 """
-    set_forecast_model(model::Model, network)
+    set_forecast_model(model::Model, network; input_names = nothing, output_names = nothing, sample_key = nothing)
 
 Attach a predictive (forecast) model to `model`. `network` may be a
 `Flux.Chain`, a `Flux.Dense` or an already built [`PredictiveModel`](@ref);
@@ -215,11 +219,37 @@ variable is created. The stored model's `output_variables` are always
 reordered to follow `model.forecast_vars`, so that the rows of a prediction
 line up with the forecast parameters of the plan model.
 
+# Keyword arguments
+
+  - `input_names::Vector{Symbol}`: name of each column of `X`, in the order the
+    predictive model expects them. Declaring them is what allows `X` to be given
+    as a table, since a table's columns are then selected by name rather than
+    trusted to be in the right order. A `Symbol`-keyed `input_output_map`
+    declares them implicitly and needs no keyword here.
+  - `output_names::Vector{Symbol}`: name of the column of `Y` holding each
+    forecast variable, in declaration order. Only needed when the columns are
+    not named after the variables themselves — most usefully for container
+    declarations such as `@variable(model, d[1:2], Forecast)`, whose variables
+    are named `d[1]` and `d[2]`.
+  - `sample_key::Symbol`: name of the column that identifies a *row* — a
+    timestamp or an id. When both `X` and `Y` are tables carrying it, the
+    realized values are looked up by key for each row of `X` instead of being
+    trusted to arrive in the same order, and a sample that is missing from `Y` is
+    an error rather than an off-by-one. Rows are matched by position when it is
+    not declared, or when either side is a container that carries no row labels
+    (an array, or the `Dict` form of `Y`).
+
+The keywords override whatever the passed [`PredictiveModel`](@ref) was built
+with.
+
 Returns the stored [`PredictiveModel`](@ref).
 """
 function set_forecast_model(
     model::Model,
-    network::Union{PredictiveModel,Flux.Chain,Flux.Dense},
+    network::Union{PredictiveModel,Flux.Chain,Flux.Dense};
+    input_names::Union{Vector{Symbol},Nothing} = nothing,
+    output_names::Union{Vector{Symbol},Nothing} = nothing,
+    sample_key::Union{Symbol,Nothing} = nothing,
 )
     if network isa PredictiveModel
         forecast = network
@@ -228,29 +258,48 @@ function set_forecast_model(
     end
     @assert forecast.output_size == length(model.forecast_vars) "Output size of forecast model must match number of forecast variables"
 
-    # set input_output_map of forecast model if not set
-    if isnothing(forecast.input_output_map)
-        forecast = PredictiveModel(
-            deepcopy(forecast.networks),
-            [Dict(collect(1:forecast.input_size) => model.forecast_vars)],
-            model.forecast_vars,
-            forecast.input_size,
-            forecast.output_size,
-        )
+    if isnothing(input_names)
+        input_names = forecast.input_names
+    end
+    if isnothing(sample_key)
+        sample_key = forecast.sample_key
     end
 
-    # make sure the same order apply on model.forecast_vars and model.forecast.output_variables
-    if any(forecast.output_variables .!= model.forecast_vars)
-        forecast = PredictiveModel(
-            forecast.networks,
-            forecast.input_output_map,
-            model.forecast_vars,
-            forecast.input_size,
-            forecast.output_size,
-        )
+    input_output_map = forecast.input_output_map
+    if isnothing(input_output_map)
+        # no map: the single network reads the whole input and produces every
+        # forecast variable
+        input_output_map =
+            [Dict(collect(1:forecast.input_size) => model.forecast_vars)]
     end
 
-    return model.forecast = forecast
+    if isnothing(output_names) && !isnothing(forecast.output_names)
+        # the stored names align with the model's own `output_variables`, so they
+        # have to follow those variables through the reordering below. A keyword
+        # instead names `model.forecast_vars`, i.e. the final order already.
+        output_names = if isnothing(forecast.output_variables)
+            forecast.output_names
+        else
+            forecast.output_names[_find_elements_position(
+                forecast.output_variables,
+                model.forecast_vars,
+            )]
+        end
+    end
+
+    # rebuild unconditionally: `output_variables` must follow
+    # `model.forecast_vars` so that the rows of a prediction line up with the
+    # plan model's forecast parameters
+    return model.forecast = PredictiveModel(
+        forecast.networks,
+        input_output_map,
+        model.forecast_vars,
+        forecast.input_size,
+        forecast.output_size;
+        input_names = input_names,
+        output_names = output_names,
+        sample_key = sample_key,
+    )
 end
 
 """
@@ -323,6 +372,26 @@ include("optimizers/gradient_mpi.jl")
 include("optimizers/bilevel.jl")
 
 """
+    _assert_forecast_model_set(model::Model)
+
+Throw an `ArgumentError` unless a predictive model has been attached with
+[`set_forecast_model`](@ref).
+
+Called before the inputs are normalized, because deciding how to read the
+realized values needs the forecast variables of the predictive model.
+"""
+function _assert_forecast_model_set(model::Model)
+    if isnothing(model.forecast)
+        throw(
+            ArgumentError(
+                "No forecast model set. Call set_forecast_model first.",
+            ),
+        )
+    end
+    return nothing
+end
+
+"""
     _dict_to_var_indexed_matrix(data::Dict{<:Forecast,<:Vector}, row_index::Vector{<:Forecast})
 
 Transform a dictionary that maps [`Forecast`](@ref) variables to their
@@ -336,19 +405,36 @@ function _dict_to_var_indexed_matrix(
     data::Dict{<:Forecast,<:Vector},
     row_index::Vector{<:Forecast},
 )
+    absent = filter(!in(keys(data)), row_index)
+    if !isempty(absent)
+        throw(
+            ArgumentError(
+                "The realized values are missing the series of " *
+                "$(length(absent)) forecast variable(s): " *
+                "$(join([_forecast_base_name(f) for f in absent], ", ")).",
+            ),
+        )
+    end
     n = size(data[row_index[1]], 1)
     tp = eltype(data[row_index[1]])
     Y = Matrix{tp}(undef, n, length(row_index))
     for (i, f) in enumerate(row_index)
-        @assert length(data[f]) == n "All forecast variable series must have the same length"
+        if length(data[f]) != n
+            throw(
+                ArgumentError(
+                    "All forecast variable series must have the same length; " *
+                    "`$(_forecast_base_name(f))` has $(length(data[f])) " *
+                    "entry(ies) instead of $n.",
+                ),
+            )
+        end
         Y[:, i] = data[f]
     end
     return Y
 end
 
 """
-    train!(model::Model, X::Matrix{<:Real}, Y::Matrix{<:Real}, options::Options)
-    train!(model::Model, X::Matrix{<:Real}, Y_dict::Dict{<:Forecast,<:Vector}, options::Options)
+    train!(model::Model, X, Y, options::Options)
 
 Train the predictive model of `model` so that it minimizes the assessed cost
 of the application.
@@ -359,10 +445,18 @@ of the application.
 
   - `model::ApplicationDrivenLearning.Model`: model to train. Its forecast
     model must have been set with [`set_forecast_model`](@ref).
-  - `X::Matrix{<:Real}`: input data of size `(T, input_size)`.
-  - `Y`: realized values, either a `(T, output_size)` matrix whose columns
-    follow the predictive model output order, or a dictionary mapping each
-    [`Forecast`](@ref) variable to its length-`T` series.
+  - `X`: input data of size `(T, input_size)`. A matrix or vector, whose columns
+    are taken in order, or a Tables.jl-compatible table such as a `DataFrame`,
+    whose columns are selected by the predictive model's `input_names`.
+  - `Y`: realized values of size `(T, output_size)`. A matrix or vector whose
+    columns follow the predictive model output order, a Tables.jl-compatible
+    table whose columns are matched to the [`Forecast`](@ref) variables by name,
+    or a dictionary mapping each [`Forecast`](@ref) variable to its length-`T`
+    series.
+
+A table is always matched by name and never falls back to column order; see
+[`set_forecast_model`](@ref) for how those names are declared.
+
   - `options::Options`: training mode and its parameters.
 
 Returns a [`Solution`](@ref) with the best cost found and the corresponding
@@ -372,17 +466,11 @@ those parameters.
 """
 function train!(
     model::Model,
-    X::Matrix{<:Real},
-    Y::Matrix{<:Real},
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
     options::Options,
 )
-    if isnothing(model.forecast)
-        throw(
-            ArgumentError(
-                "No forecast model set. Call set_forecast_model first.",
-            ),
-        )
-    end
+    _assert_forecast_model_set(model)
 
     # the MPI modes call `_compute_single_step_cost` directly instead of going
     # through `compute_cost`, so the parameters and the policy-fixing
@@ -407,27 +495,22 @@ function train!(
     end
 end
 
-# train! with dictionary structured real data argument
+# train! with any other supported container: vectors, Tables.jl tables such as a
+# `DataFrame`, and the `Dict{Forecast,Vector}` form, all normalized to matrices by
+# `_to_matrices` before training starts.
+#
+# `X` and `Y` are `@nospecialize`d for the same reason as in `compute_cost`:
+# specializing this wrapper on the container types pulls the whole training path
+# through inference again, which measured in minutes rather than milliseconds.
 function train!(
     model::Model,
-    X::Matrix{<:Real},
-    Y_dict::Dict{<:Forecast,<:Vector},
+    @nospecialize(X),
+    @nospecialize(Y),
     options::Options,
 )
-    if isnothing(model.forecast)
-        throw(
-            ArgumentError(
-                "No forecast model set. Call set_forecast_model first.",
-            ),
-        )
-    end
-    # transform dictionary data into ordered matrix
-    return train!(
-        model,
-        X,
-        _dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
-        options,
-    )
+    _assert_forecast_model_set(model)
+    Xm, Ym = _to_matrices(X, Y, model.forecast)
+    return train!(model, Xm, Ym, options)
 end
 
 export Model,
