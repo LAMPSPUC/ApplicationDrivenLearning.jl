@@ -166,13 +166,14 @@ addprocs(4)
 # `@everywhere` so that the workers can call it too
 @everywhere function build_case()
     m = ApplicationDrivenLearning.Model()
-    # ... variables, constraints and objectives ...
+    @variable(m, demand, ApplicationDrivenLearning.Forecast)
+    # ... policy variables, constraints and objectives ...
     set_optimizer(m, HiGHS.Optimizer)
     ApplicationDrivenLearning.set_forecast_model(
         m,
-        ApplicationDrivenLearning.PredictiveModel(
-            Chain(Dense(1 => 1));
-            output_names = [:demand],
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Chain(Dense(1 => 1)),
+            outputs = [demand],
         ),
     )
     return m

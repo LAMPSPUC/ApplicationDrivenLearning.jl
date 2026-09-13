@@ -17,10 +17,11 @@ reading and it keeps the meaning it always had. A table's columns *are* named, s
 ignoring those names in favour of their order is how a caller silently ends up
 training against the wrong series — reordering the columns of a `DataFrame` would
 change the answer without any complaint. Tables are therefore matched against the
-schema the predictive model declares (`input_names` / `output_names`, see
-[`PredictiveModel`](@ref)) and rejected when it cannot be matched, rather than
-falling back to position. `Matrix(df)` is the way to ask for positional matching,
-and reads as exactly that request: it drops the names.
+schema the forecast declares — each [`ForecastModel`](@ref) unit's `inputs`
+written as column names, and its `outputs` written as `variable => :column` — and
+rejected when it cannot be matched, rather than falling back to position.
+`Matrix(df)` is the way to ask for positional matching, and reads as exactly
+that request: it drops the names.
 
 There is no exception for a table with a single column. Its order cannot be wrong,
 but its *name* still can: a one-input model handed `DataFrame(humidity = ...)`
@@ -30,7 +31,8 @@ smallest model — the one anybody meets first — is the one that teaches the h
 of not declaring anything.
 
 The same rule extends one dimension further, to *rows*. Declaring a `sample_key`
-(see [`PredictiveModel`](@ref)) names the column that identifies an observation —
+(see [`set_forecast_model`](@ref)) names the column that identifies an
+observation —
 a timestamp or an id — and the realized values are then looked up by key for each
 row of `X` rather than trusted to arrive in the same order. Without one, rows are
 matched by position, which is the only reading unlabelled rows admit.
@@ -181,7 +183,7 @@ function _matched_columns(
 end
 
 """
-    _sample_keys(data, forecast::PredictiveModel, what::String)
+    _sample_keys(data, forecast::FullForecastModel, what::String)
 
 Values of the `sample_key` column of `data`, or `nothing` when rows cannot be
 matched by key.
@@ -191,7 +193,7 @@ carries no row labels, so position is the only reading available — the same
 fallback the column rule makes for an unnamed container. A table that *is* passed
 must carry the declared key, since declaring one asserts that it does.
 """
-function _sample_keys(data, forecast::PredictiveModel, what::String)
+function _sample_keys(data, forecast::FullForecastModel, what::String)
     key = forecast.sample_key
     (isnothing(key) || !Tables.istable(data)) && return nothing
     available = _table_column_names(data)
@@ -251,17 +253,18 @@ function _row_permutation(kx, ky, sample_key::Symbol)
 end
 
 const _X_HINT =
-    "Pass `input_names` to `set_forecast_model`, write the `input_output_map` " *
-    "with `Symbol` keys, or pass `Matrix(X)` to match the columns by position " *
-    "instead."
+    "Write each `ForecastModel`'s `inputs` as column names, which is what " *
+    "declares the input schema, or pass `Matrix(X)` to match the columns by " *
+    "position instead."
 
 const _Y_HINT =
-    "Pass `output_names` to `set_forecast_model`, name the columns after the " *
-    "forecast variables, pass a `Dict` keyed by the `Forecast` variables, or " *
-    "pass `Matrix(Y)` to match the columns by position instead."
+    "Write a unit's `outputs` as `variable => :column`, name the columns after " *
+    "the forecast variables, pass a `Dict` keyed by the `Forecast` variables, " *
+    "or pass `Matrix(Y)` to match the columns by position instead - writing " *
+    "`variable => position` if that order should be pinned rather than assumed."
 
 """
-    _to_input_matrix(X, forecast::PredictiveModel)
+    _to_input_matrix(X, forecast::FullForecastModel)
 
 Normalize the input data `X` to a `(samples x features)` matrix.
 
@@ -269,15 +272,15 @@ Accepts an `AbstractMatrix` (returned as is), an `AbstractVector` (treated as a
 single feature, i.e. reshaped to `(T, 1)`) or any Tables.jl-compatible table,
 whose columns are selected by `forecast.input_names`.
 """
-function _to_input_matrix(X::AbstractMatrix, ::PredictiveModel)
+function _to_input_matrix(X::AbstractMatrix, ::FullForecastModel)
     return _check_real_eltype(X, "Input data `X`")
 end
 
-function _to_input_matrix(X::AbstractVector, ::PredictiveModel)
+function _to_input_matrix(X::AbstractVector, ::FullForecastModel)
     return _check_real_eltype(reshape(X, length(X), 1), "Input data `X`")
 end
 
-function _to_input_matrix(X, forecast::PredictiveModel)
+function _to_input_matrix(X, forecast::FullForecastModel)
     if !Tables.istable(X)
         throw(
             ArgumentError(
@@ -299,20 +302,31 @@ function _to_input_matrix(X, forecast::PredictiveModel)
 end
 
 """
-    _output_column_names(forecast::PredictiveModel)
+    _output_column_names(forecast::FullForecastModel)
 
 Name of the `Y` column holding each of `forecast.output_variables`, or `nothing`
 when the forecast variables cannot name their own columns.
 
 Defaults to the declared names of the variables themselves, so that
 `@variable(model, demand, Forecast)` reads a `demand` column with nothing to
-configure. An explicit `output_names` overrides them, which is what container
-declarations need: `@variable(model, d[1:2], Forecast)` names its variables
-`d[1]` and `d[2]`, and a table is unlikely to carry columns called that.
+configure. Explicit names override them, which is what container declarations
+need: `@variable(model, d[1:2], Forecast)` names its variables `d[1]` and `d[2]`,
+and a table is unlikely to carry columns called that.
+
+Returns `nothing` when the units gave their `Y` columns by *position* instead: a
+position describes an array, and matching the columns of a named container by
+order is what the rule at the top of this file exists to refuse.
 """
-function _output_column_names(forecast::PredictiveModel)
-    if !isnothing(forecast.output_names)
-        return forecast.output_names
+function _output_column_names(forecast::FullForecastModel)
+    columns = forecast.output_columns
+    if columns isa Vector{Symbol}
+        return columns
+    elseif columns isa Vector{Int}
+        # positions describe an array, so there is no name schema to report. A
+        # caller reaching here through `_to_output_matrix` has already been
+        # refused, by a message that can name the positions; this is the answer
+        # for anyone asking the question directly
+        return nothing
     end
     names = Symbol.(_forecast_base_name.(forecast.output_variables))
     # an anonymous variable has no name to match, and a repeated name would feed
@@ -324,25 +338,39 @@ function _output_column_names(forecast::PredictiveModel)
 end
 
 """
-    _to_output_matrix(Y, forecast::PredictiveModel)
+    _to_output_matrix(Y, forecast::FullForecastModel)
 
 Normalize the realized values `Y` to a `(samples x variables)` matrix whose
 columns follow the order of `forecast.output_variables`.
 
-Accepts an `AbstractMatrix` or `AbstractVector` — matched positionally — or any
-Tables.jl-compatible table, whose columns are matched by name against
-[`_output_column_names`](@ref).
+Accepts an `AbstractMatrix` or `AbstractVector` — matched positionally, taking the
+columns the units gave by position when they gave any — or any Tables.jl-compatible
+table, whose columns are matched by name against [`_output_column_names`](@ref).
 """
-function _to_output_matrix(Y::AbstractMatrix, ::PredictiveModel)
-    return _check_real_eltype(Y, "Realized values `Y`")
+function _to_output_matrix(Y::AbstractMatrix, forecast::FullForecastModel)
+    return _select_output_columns(
+        _check_real_eltype(Y, "Realized values `Y`"),
+        forecast,
+    )
 end
 
-function _to_output_matrix(Y::AbstractVector, ::PredictiveModel)
-    return _check_real_eltype(reshape(Y, length(Y), 1), "Realized values `Y`")
+function _to_output_matrix(Y::AbstractVector, forecast::FullForecastModel)
+    return _to_output_matrix(reshape(Y, length(Y), 1), forecast)
 end
 
-function _to_output_matrix(Y, forecast::PredictiveModel)
-    if !Tables.istable(Y)
+function _to_output_matrix(Y, forecast::FullForecastModel)
+    if forecast.output_columns isa Vector{Int} && Tables.istable(Y)
+        throw(
+            ArgumentError(
+                "Realized values `Y` are a $(typeof(Y)), but the `outputs` of " *
+                "this forecast give their `Y` columns by position " *
+                "($(join(string.(forecast.output_columns), ", "))). A position " *
+                "describes an array; the columns of a named container are " *
+                "matched by name, never by order. Write the `outputs` as " *
+                "`variable => :column`, or pass a matrix.",
+            ),
+        )
+    elseif !Tables.istable(Y)
         throw(
             ArgumentError(
                 "Realized values `Y` must be a matrix, a vector, a " *
@@ -358,13 +386,73 @@ function _to_output_matrix(Y, forecast::PredictiveModel)
         forecast.output_size,
         forecast.sample_key,
         "Realized values `Y`",
-        _Y_HINT,
+        _Y_HINT * _output_schema_reason(forecast),
     )
     return _columns_to_matrix(Y, names, "Realized values `Y`")
 end
 
 """
-    _to_matrices(X, Y, forecast::PredictiveModel)
+    _select_output_columns(Ym, forecast)
+
+Take the `Y` columns the units gave by position, in forecast-variable order.
+
+The identity unless some unit wrote `variable => position`: without one, a matrix
+`Y` is read as already being in forecast-variable order, and there is nothing to
+select.
+
+Applied exactly once, here. That is why the matrix methods of `compute_cost` and
+`train!` normalize their arguments rather than assume them normalized: a raw matrix
+does not reach the generic methods, so a selection placed only there would be
+skipped for exactly the caller that asked for it, while one placed in both would
+be applied twice.
+"""
+function _select_output_columns(Ym::AbstractMatrix, forecast::FullForecastModel)
+    columns = forecast.output_columns
+    columns isa Vector{Int} || return Ym
+    width = _output_width(forecast)
+    if size(Ym, 2) < width
+        throw(
+            ArgumentError(
+                "Realized values `Y` have $(size(Ym, 2)) column(s), but the " *
+                "`outputs` of this forecast read column $width of them: the " *
+                "declared positions are " *
+                "$(join(string.(columns), ", ")).",
+            ),
+        )
+    end
+    return Ym[:, columns]
+end
+
+"""
+    _output_schema_reason(forecast)
+
+Why a forecast declares no `Y` column names, when the reason is the forecast
+rather than the container that was passed. Empty otherwise.
+
+Without it the caller is told only that no schema is declared, which is a
+statement about their table — when what they have to change is the `outputs` of a
+unit.
+"""
+function _output_schema_reason(forecast::FullForecastModel)
+    isnothing(forecast.output_columns) || return ""
+    names = string.(_forecast_base_name.(forecast.output_variables))
+    anonymous = findall(isempty, names)
+    if !isempty(anonymous)
+        return " Forecast variable(s) $(join(anonymous, ", ")) of this model " *
+               "are anonymous, so they have no name of their own for a column " *
+               "to be matched against."
+    end
+    repeated = unique([n for n in names if count(isequal(n), names) > 1])
+    if !isempty(repeated)
+        return " More than one forecast variable of this model is called " *
+               "$(join(repeated, ", ")), so a column of that name would feed " *
+               "both."
+    end
+    return ""
+end
+
+"""
+    _to_matrices(X, Y, forecast::FullForecastModel)
 
 Normalize both arguments to matrices, aligning the rows of `Y` to those of `X`
 when a `sample_key` is declared and both carry it.
@@ -374,7 +462,7 @@ cannot be decided from either argument alone. Every public entry point goes
 through here, so declaring a `sample_key` once is enough — there is no per-call
 keyword to forget, and forgetting it would silently mean an unchecked alignment.
 """
-function _to_matrices(X, Y, forecast::PredictiveModel)
+function _to_matrices(X, Y, forecast::FullForecastModel)
     Xm = _to_input_matrix(X, forecast)
     Ym = _to_output_matrix(Y, forecast)
     kx = _sample_keys(X, forecast, "Input data `X`")
@@ -387,7 +475,7 @@ function _to_matrices(X, Y, forecast::PredictiveModel)
 end
 
 """
-    _to_matrices(X, Y_dict::Dict{<:Forecast,<:Vector}, forecast::PredictiveModel)
+    _to_matrices(X, Y_dict::Dict{<:Forecast,<:Vector}, forecast::FullForecastModel)
 
 Variant for realized values given as a `Dict` keyed by [`Forecast`](@ref)
 variables.
@@ -401,7 +489,7 @@ carries no row labels either, so there is nothing to align.
 function _to_matrices(
     X,
     Y_dict::Dict{<:Forecast,<:Vector},
-    forecast::PredictiveModel,
+    forecast::FullForecastModel,
 )
     return _to_input_matrix(X, forecast),
     _dict_to_var_indexed_matrix(Y_dict, forecast.output_variables)

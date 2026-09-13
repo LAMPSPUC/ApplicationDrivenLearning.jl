@@ -12,11 +12,28 @@ using DataFrames
 using Tables
 
 """
+`outputs` entries for a unit predicting `vars`: bare variables when no column
+names are declared, `variable => :column` pairs when they are. The builders below
+take `output_names` as a vector only because their callers find that convenient;
+the API itself names a column next to the variable it holds, which is why a
+count mismatch between the two is not expressible through it.
+"""
+function _named_outputs(vars, names)
+    isnothing(names) && return vars
+    @assert length(names) == length(vars)
+    return [v => n for (v, n) in zip(vars, names)]
+end
+
+"""
 Newsvendor with a single scalar [`Forecast`](@ref) named `d`, and a perfect
 identity forecast model, so that the assessed cost of a sample is
 `(c - q) * d = -4d`.
 """
-function _inputs_newsvendor(; kwargs...)
+function _inputs_newsvendor(;
+    inputs = nothing,
+    output_names = nothing,
+    kwargs...,
+)
     m = ADL.Model()
     @variables(m, begin
         x, ADL.Policy
@@ -44,10 +61,14 @@ function _inputs_newsvendor(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
-            kwargs...,
-        ),
+        ADL.ForecastModel(
+            inputs = inputs,
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = _named_outputs([d], output_names),
+        );
+        kwargs...,
     )
     return m, d
 end
@@ -58,7 +79,11 @@ Absolute-deviation model with a single scalar [`Forecast`](@ref) predicted from
 columns in the wrong order changes the cost. The assessed cost of a sample is
 `|ŷ - y|`.
 """
-function _two_feature_model(; kwargs...)
+function _two_feature_model(;
+    inputs = nothing,
+    output_names = nothing,
+    kwargs...,
+)
     m = ADL.Model()
     @variables(m, begin
         x, ADL.Policy
@@ -76,10 +101,14 @@ function _two_feature_model(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(2 => 1; bias = false, init = (s...) -> [1.0 10.0]));
-            kwargs...,
-        ),
+        ADL.ForecastModel(
+            inputs = inputs,
+            architecture = Chain(
+                Dense(2 => 1; bias = false, init = (s...) -> [1.0 10.0]),
+            ),
+            outputs = _named_outputs([d], output_names),
+        );
+        kwargs...,
     )
     return m, d
 end
@@ -90,7 +119,7 @@ input feature read by an identity network, so the assessed cost of a sample is
 `|x - y|`. Zero cost is then proof that a realized value met the input row it
 belongs to, which is what makes row matching observable.
 """
-function _absdev_model(; kwargs...)
+function _absdev_model(; inputs = nothing, output_names = nothing, kwargs...)
     m = ADL.Model()
     @variables(m, begin
         x, ADL.Policy
@@ -108,10 +137,14 @@ function _absdev_model(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
-            kwargs...,
-        ),
+        ADL.ForecastModel(
+            inputs = inputs,
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = _named_outputs([d], output_names),
+        );
+        kwargs...,
     )
     return m, d
 end
@@ -121,7 +154,11 @@ Two [`Forecast`](@ref) variables declared as a container, so they are named
 `f[1]` and `f[2]` rather than after anything a table would hold. The
 coefficients differ, so swapping the two series changes the cost.
 """
-function _container_forecast_model(; kwargs...)
+function _container_forecast_model(;
+    inputs = nothing,
+    output_names = nothing,
+    kwargs...,
+)
     m = ADL.Model()
     @variable(m, x, ADL.Policy)
     @variable(m, f[1:2], ADL.Forecast)
@@ -134,10 +171,14 @@ function _container_forecast_model(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...)));
-            kwargs...,
-        ),
+        ADL.ForecastModel(
+            inputs = inputs,
+            architecture = Chain(
+                Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = _named_outputs([f[1], f[2]], output_names),
+        );
+        kwargs...,
     )
     return m, f
 end
@@ -163,8 +204,11 @@ function _two_forecast_model()
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d, e],
         ),
     )
     return m, d, e
@@ -203,7 +247,7 @@ end
     # `compute_cost` does not mutate the predictive model, so one model serves
     # every container - building a fresh one per case dominated the runtime
     # every table `X` below holds its single feature in a column called `a`
-    m, d = _inputs_newsvendor(; input_names = [:a])
+    m, d = _inputs_newsvendor(; inputs = [:a])
 
     # the `Dict` form is the reference: it is keyed by the variables themselves
     expected = ADL.compute_cost(m, Xm, Dict(d => Yv), false, false)
@@ -303,7 +347,7 @@ end
     )
 
     # declaring the name is the fix, and it then refuses the wrong column
-    named, _ = _inputs_newsvendor(; input_names = [:a])
+    named, _ = _inputs_newsvendor(; inputs = [:a])
     @test ADL.compute_cost(
         named,
         DataFrame(a = [10.0, 20.0]),
@@ -337,7 +381,7 @@ end
     )
 end
 
-@testset "X columns are selected by input_names" begin
+@testset "X columns are selected by the names the units read" begin
     X = [1.0 2.0; 3.0 4.0]
     Y = [21.0, 43.0]  # exactly the prediction of the correctly ordered input
 
@@ -361,7 +405,7 @@ end
         atol = 1e-6,
     )
 
-    named, _ = _two_feature_model(; input_names = [:a, :b])
+    named, _ = _two_feature_model(; inputs = [:a, :b])
     @test named.forecast.input_names == [:a, :b]
     ordered = DataFrame(a = X[:, 1], b = X[:, 2])
     @test ADL.compute_cost(named, ordered, Y, false, false) ≈ [0.0, 0.0] atol =
@@ -394,49 +438,58 @@ end
     @test ADL.compute_cost(named, X, Y, false, false) ≈ [0.0, 0.0] atol = 1e-6
 end
 
-@testset "Symbol keys in the input_output_map declare the schema" begin
+@testset "Named inputs on the units declare the schema" begin
     m = ADL.Model()
     @variables(m, begin
         x, ADL.Policy
         d, ADL.Forecast
         e, ADL.Forecast
     end)
-    nets = [Dense(1 => 1; bias = false), Dense(1 => 1; bias = false)]
-    named_map = [Dict([:zz] => [d]), Dict([:aa] => [e])]
+    # a function, so each call builds fresh architectures: two units may not hold
+    # the same object
+    units() = [
+        ADL.ForecastModel(
+            inputs = [:zz],
+            architecture = Dense(1 => 1; bias = false),
+            outputs = [d],
+        ),
+        ADL.ForecastModel(
+            inputs = [:aa],
+            architecture = Dense(1 => 1; bias = false),
+            outputs = [e],
+        ),
+    ]
 
-    pm = ADL.PredictiveModel(nets, named_map)
-    # the schema defaults to the names the map uses, in alphabetical order -
-    # `keys(::Dict)` has no defined order, so it cannot be first-appearance
-    @test pm.input_names == [:aa, :zz]
+    pm = ADL.FullForecastModel(units())
+    # the schema is the names the units use, in order of first appearance, and it
+    # is declared nowhere else
+    @test pm.input_names == [:zz, :aa]
     @test pm.input_size == 2
-    # resolved to positions in that order: `d` reads `zz`, column 2
-    @test pm.input_output_map[1] == Dict([2] => [d])
-    @test pm.input_output_map[2] == Dict([1] => [e])
+    # resolved to positions in that order: `d` reads `zz`, column 1
+    @test pm.units[1].inputs == [1]
+    @test pm.units[1].outputs == [d]
+    @test pm.units[2].inputs == [2]
+    @test pm.units[2].outputs == [e]
 
-    # an explicit `input_names` fixes a different column order instead
-    pm2 = ADL.PredictiveModel(nets, named_map; input_names = [:zz, :aa])
-    @test pm2.input_names == [:zz, :aa]
-    @test pm2.input_output_map[1] == Dict([1] => [d])
-    @test pm2.input_output_map[2] == Dict([2] => [e])
+    # so a different column order is asked for by writing the units in it
+    pm2 = ADL.FullForecastModel(reverse(units()))
+    @test pm2.input_names == [:aa, :zz]
+    @test pm2.units[1].inputs == [1]
+    @test pm2.units[1].outputs == [e]
+    @test pm2.units[2].inputs == [2]
+    @test pm2.units[2].outputs == [d]
 
-    # and it has to cover every name the map refers to
-    @test_throws ArgumentError ADL.PredictiveModel(
-        nets,
-        named_map;
-        input_names = [:zz, :bb],
-    )
-
-    # the names survive `set_forecast_model`, which rebuilds the model
+    # the names survive `set_forecast_model`, which rebuilds the forecast
     ADL.set_forecast_model(m, pm)
-    @test m.forecast.input_names == [:aa, :zz]
+    @test m.forecast.input_names == [:zz, :aa]
 end
 
-@testset "output_names names the columns of container forecasts" begin
+@testset "naming the Y columns of container forecasts" begin
     # `@variable(m, f[1:2], Forecast)` names its variables `f[1]` and `f[2]`, which
     # no table is going to carry, so without `output_names` those models would be
     # stuck with the `Dict` form
     m, f = _container_forecast_model(; output_names = [:demand, :price])
-    @test m.forecast.output_names == [:demand, :price]
+    @test m.forecast.output_columns == [:demand, :price]
     X = reshape([1.0, 2.0], 2, 1)
     expected = ADL.compute_cost(
         m,
@@ -455,7 +508,7 @@ end
 
     # without it, the variables' own names are looked for and not found
     bare, _ = _container_forecast_model()
-    @test isnothing(bare.forecast.output_names)
+    @test isnothing(bare.forecast.output_columns)
     @test ADL._output_column_names(bare.forecast) ==
           [Symbol("f[1]"), Symbol("f[2]")]
     @test_throws ArgumentError ADL.compute_cost(
@@ -467,15 +520,15 @@ end
     )
 end
 
-@testset "output_names follow their variables through the reordering" begin
-    # `set_forecast_model` reorders a `PredictiveModel`'s `output_variables` to
-    # follow the model's own declaration order, so that a prediction's rows line up
-    # with the plan model's forecast parameters. The `output_names` are indexed by
-    # the *old* order and have to be permuted with it - otherwise every column
+@testset "column names follow their variables through the reordering" begin
+    # `set_forecast_model` reorders the units' forecast variables to follow the
+    # model's own declaration order, so that a prediction's rows line up with the
+    # plan model's forecast parameters. The declared column names are indexed by
+    # the *unit* order and have to be permuted with it - otherwise every column
     # would be read into the wrong variable, silently.
     #
     # This is the one place the permutation is the subject rather than a detail,
-    # which is why the map here is deliberately in the opposite order to the
+    # which is why the units here are deliberately in the opposite order to the
     # declarations.
     m = ADL.Model()
     @variables(m, begin
@@ -491,20 +544,27 @@ end
     set_optimizer(m, HiGHS.Optimizer)
     set_silent(m)
 
-    # one network per variable, mapped in the *opposite* order, so the predictive
-    # model's `output_variables` are [e, d] while the model's are [d, e]
+    # one architecture per variable, listed in the *opposite* order, so the
+    # forecast's `output_variables` are [e, d] while the model's are [d, e]
     net() = Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)))
-    pm = ADL.PredictiveModel(
-        [net(), net()],
-        [Dict([1] => [e]), Dict([1] => [d])];
-        output_names = [:e_col, :d_col],
-    )
+    pm = ADL.FullForecastModel([
+        ADL.ForecastModel(
+            inputs = [1],
+            architecture = net(),
+            outputs = [e => :e_col],
+        ),
+        ADL.ForecastModel(
+            inputs = [1],
+            architecture = net(),
+            outputs = [d => :d_col],
+        ),
+    ])
     @test pm.output_variables == [e, d]
-    @test pm.output_names == [:e_col, :d_col]
+    @test pm.output_columns == [:e_col, :d_col]
 
     ADL.set_forecast_model(m, pm)
     @test m.forecast.output_variables == [d, e]
-    @test m.forecast.output_names == [:d_col, :e_col]   # permuted alongside
+    @test m.forecast.output_columns == [:d_col, :e_col]   # permuted alongside
 
     # and the names really do reach the right variables: the plan coefficient on
     # `e` is twice that on `d`, so a swap would change the cost
@@ -524,16 +584,18 @@ end
         false,
     ) ≈ expected atol = 1e-6
 
-    # a single-network model has no map, so no `output_variables` to be permuted
-    # against - its names already refer to the declaration order and must survive
-    # untouched
-    mapless = ADL.PredictiveModel(
-        Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...)));
-        output_names = [:d_col, :e_col],
+    # one unit predicting both variables in declaration order: the permutation is
+    # the identity, and the names must survive it untouched
+    single = ADL.ForecastModel(
+        architecture = Chain(
+            Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+        ),
+        outputs = [d => :d_col, e => :e_col],
     )
-    @test isnothing(mapless.output_variables)
-    ADL.set_forecast_model(m, mapless)
-    @test m.forecast.output_names == [:d_col, :e_col]
+    @test single.output_columns == [:d_col, :e_col]
+    ADL.set_forecast_model(m, single)
+    @test m.forecast.output_variables == [d, e]
+    @test m.forecast.output_columns == [:d_col, :e_col]
     @test ADL.compute_cost(
         m,
         X,
@@ -559,8 +621,11 @@ end
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [anon[1], anon[2]],
         ),
     )
 
@@ -579,15 +644,95 @@ end
     # declaring the names is the way out
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...)));
-            output_names = [:a, :b],
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [anon[1] => :a, anon[2] => :b],
         ),
     )
     @test ADL._output_column_names(m.forecast) == [:a, :b]
     @test isfinite(
         ADL.compute_cost(m, X, DataFrame(a = [3.0, 4.0], b = [5.0, 6.0])),
     )
+
+    # ... and so is giving the columns by position, which declares no names at
+    # all. `_output_column_names` says so directly; a table reaching
+    # `_to_output_matrix` is refused earlier, by a message that can name them
+    ADL.set_forecast_model(
+        m,
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [anon[1] => 2, anon[2] => 1],
+        ),
+    )
+    @test isnothing(ADL._output_column_names(m.forecast))
+    @test isfinite(ADL.compute_cost(m, X, [5.0 3.0; 6.0 4.0]))
+end
+
+@testset "why a forecast declares no Y column names is part of the message" begin
+    # The refusal above is about the container the caller passed, but the thing
+    # they have to change is a unit's `outputs`. Both reasons a forecast can fail
+    # to name its columns are therefore named.
+    anon = ADL.Model()
+    @variable(anon, xa, ADL.Policy)
+    va = @variable(anon, [1:2], ADL.Forecast)
+    @objective(ADL.Plan(anon), Min, xa.plan)
+    @objective(ADL.Assess(anon), Min, xa.assess)
+    set_optimizer(anon, HiGHS.Optimizer)
+    set_silent(anon)
+    ADL.set_forecast_model(
+        anon,
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [va[1], va[2]],
+        ),
+    )
+    err_anon = try
+        ADL.compute_cost(
+            anon,
+            reshape([1.0], 1, 1),
+            DataFrame(a = [1.0], b = [2.0]),
+        )
+        nothing
+    catch e
+        e
+    end
+    @test err_anon isa ArgumentError
+    @test occursin("are anonymous", err_anon.msg)
+
+    # two variables can share a base name when it is given explicitly, and then a
+    # column of that name would feed both
+    dup = ADL.Model()
+    @variable(dup, xd, ADL.Policy)
+    d1 = @variable(dup, base_name = "dup", variable_type = ADL.Forecast)
+    d2 = @variable(dup, base_name = "dup", variable_type = ADL.Forecast)
+    @objective(ADL.Plan(dup), Min, xd.plan)
+    @objective(ADL.Assess(dup), Min, xd.assess)
+    set_optimizer(dup, HiGHS.Optimizer)
+    set_silent(dup)
+    ADL.set_forecast_model(
+        dup,
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 2; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d1, d2],
+        ),
+    )
+    @test isnothing(ADL._output_column_names(dup.forecast))
+    err_dup = try
+        ADL.compute_cost(dup, reshape([1.0], 1, 1), DataFrame(a = [1.0], b = [2.0]))
+        nothing
+    catch e
+        e
+    end
+    @test err_dup isa ArgumentError
+    @test occursin("is called dup", err_dup.msg)
 end
 
 @testset "sample_key matches rows instead of trusting their order" begin
@@ -597,7 +742,7 @@ end
     aligned = DataFrame(t = [10, 20, 30], d = [1.0, 2.0, 3.0])
     shuffled = DataFrame(t = [30, 10, 20], d = [3.0, 1.0, 2.0])
 
-    keyed, _ = _absdev_model(; input_names = [:a], sample_key = :t)
+    keyed, _ = _absdev_model(; inputs = [:a], sample_key = :t)
     @test keyed.forecast.sample_key == :t
     @test ADL.compute_cost(keyed, X, aligned, false, false) ≈ zeros(3) atol =
         1e-6
@@ -606,7 +751,7 @@ end
 
     # and the mistake it protects against is a real one: without the key the very
     # same shuffled table is read in order, and quietly gives a different answer
-    bare, _ = _absdev_model(; input_names = [:a])
+    bare, _ = _absdev_model(; inputs = [:a])
     @test isnothing(bare.forecast.sample_key)
     @test ADL.compute_cost(bare, X, aligned, false, false) ≈ zeros(3) atol =
         1e-6
@@ -647,7 +792,7 @@ end
 
 @testset "sample_key errors" begin
     X = DataFrame(t = [10, 20, 30], a = [1.0, 2.0, 3.0])
-    keyed, _ = _absdev_model(; input_names = [:a], sample_key = :t)
+    keyed, _ = _absdev_model(; inputs = [:a], sample_key = :t)
 
     # a sample `X` asks for that `Y` does not have is an error, not an off-by-one
     @test_throws ArgumentError ADL.compute_cost(
@@ -703,8 +848,8 @@ end
         verbose = false,
     )
 
-    ms, _ = _absdev_model(; input_names = [:a], sample_key = :t)
-    ma, _ = _absdev_model(; input_names = [:a], sample_key = :t)
+    ms, _ = _absdev_model(; inputs = [:a], sample_key = :t)
+    ma, _ = _absdev_model(; inputs = [:a], sample_key = :t)
     sol_shuffled = ADL.train!(ms, X, shuffled, opt)
     sol_aligned = ADL.train!(ma, X, aligned, opt)
     @test sol_shuffled.cost ≈ sol_aligned.cost atol = 1e-6
@@ -712,11 +857,13 @@ end
 end
 
 @testset "declared names are validated against the model" begin
-    @test_throws ArgumentError _two_feature_model(; input_names = [:a])
-    @test_throws ArgumentError _two_feature_model(; input_names = [:a, :b, :c])
-    # a repeated name would feed two slots from the same column
-    @test_throws ArgumentError _two_feature_model(; input_names = [:a, :a])
-    @test_throws ArgumentError _inputs_newsvendor(; output_names = [:a, :b])
+    @test_throws ArgumentError _two_feature_model(; inputs = [:a])
+    @test_throws ArgumentError _two_feature_model(; inputs = [:a, :b, :c])
+    # a repeated name would feed two of the architecture's inputs from one column
+    @test_throws ArgumentError _two_feature_model(; inputs = [:a, :a])
+    # a count mismatch between variables and column names is no longer
+    # expressible: a name is written next to the variable it belongs to. A
+    # repeated name still is, and still feeds two variables from one column
     @test_throws ArgumentError _container_forecast_model(;
         output_names = [:same, :same],
     )
@@ -763,7 +910,7 @@ end
         verbose = false,
     )
 
-    mt, _ = _inputs_newsvendor(; input_names = [:a])
+    mt, _ = _inputs_newsvendor(; inputs = [:a])
     sol_table = ADL.train!(mt, Xd, Yd, opt)
 
     md, dd = _inputs_newsvendor()
@@ -773,13 +920,13 @@ end
     @test sol_table.params ≈ sol_dict.params atol = 1e-6
 
     # a NamedTuple table and a vector reach the same place
-    mn, _ = _inputs_newsvendor(; input_names = [:a])
+    mn, _ = _inputs_newsvendor(; inputs = [:a])
     sol_nt = ADL.train!(mn, (a = ones(4),), (d = fill(50.0, 4),), opt)
     @test sol_nt.cost ≈ sol_dict.cost atol = 1e-6
 end
 
 @testset "input container errors" begin
-    m, _ = _inputs_newsvendor(; input_names = [:a])
+    m, _ = _inputs_newsvendor(; inputs = [:a])
     Xm = reshape([10.0, 20.0], 2, 1)
     Yv = [10.0, 20.0]
 
@@ -842,7 +989,7 @@ end
     # `Base.specializations` reports what the compiler actually instantiated, so
     # a single entry for a method called with several unrelated container types
     # is direct evidence the annotation is still doing its job.
-    m, d = _inputs_newsvendor(; input_names = [:a])
+    m, d = _inputs_newsvendor(; inputs = [:a])
     Yv = [10.0, 20.0]
     container_pairs = [
         ((a = Yv,), (d = Yv,)),

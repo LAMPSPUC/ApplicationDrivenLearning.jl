@@ -54,9 +54,14 @@ set_silent(model)
 X = reshape([1 1], (2, 1)) .|> Float32
 Y = Dict(θ => [10, 20] .|> Float32)
 
-# forecast model
-nn = Chain(Dense(1 => 1; bias=false))
-ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn))
+# forecast model: one architecture, and the forecast variable it predicts
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    ApplicationDrivenLearning.ForecastModel(
+        architecture = Chain(Dense(1 => 1; bias=false)),
+        outputs = [θ],
+    ),
+)
 
 # training the full model
 solution = ApplicationDrivenLearning.train!(
@@ -171,8 +176,15 @@ using DataFrames
 X = DataFrame(ones = Float32[1, 1])
 Y = DataFrame(θ = Float32[10, 20])
 
-# a table is read by its column names, so say which column is the input
-ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn; input_names = [:ones]))
+# a table is read by its column names, so name the column the unit reads
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    ApplicationDrivenLearning.ForecastModel(
+        inputs = [:ones],
+        architecture = Chain(Dense(1 => 1; bias=false)),
+        outputs = [θ],
+    ),
+)
 ```
 
 #### How columns are matched
@@ -197,26 +209,37 @@ The names a table is matched against are the ones the model declares:
   - **`Y`** uses the names of the forecast variables. `@variable(model, θ,
     Forecast)` reads a `θ` column with nothing to configure. Container
     declarations like `@variable(model, θ[1:2], Forecast)` name their variables
-    `θ[1]` and `θ[2]`, which no table is likely to carry, so pass
-    `output_names = [:demand, :price]` to [`set_forecast_model`](@ref) — or use
-    the `Dict` form, which is keyed by the variables themselves.
-  - **`X`** uses `input_names`, either declared directly or implied by writing
-    the `input_output_map` with `Symbol` keys:
+    `θ[1]` and `θ[2]`, which no table is likely to carry, so name the column next
+    to the variable — `outputs = [θ[1] => :demand, θ[2] => :price]` — or use the
+    `Dict` form, which is keyed by the variables themselves.
+  - **`X`** uses the column names in each unit's `inputs`. Writing them as names
+    rather than as positions is what declares the input schema, and there is no
+    other place to declare it:
 
 ```julia
-# declared directly, for a single network applied to the whole input
-ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(Chain(Dense(2 => 1)); input_names = [:temp, :hour]))
-
-# or implied, by naming the inputs in the map itself, where each network
-# reads its own columns
-PredictiveModel(
-    [Dense(2 => 1), Dense(1 => 1)],
-    [Dict([:temp, :hour] => [demand]), Dict([:price] => [spill])],
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    [
+        ForecastModel(
+            inputs = [:temp, :hour],
+            architecture = Dense(2 => 1),
+            outputs = [demand],
+        ),
+        ForecastModel(
+            inputs = [:price],
+            architecture = Dense(1 => 1),
+            outputs = [spill],
+        ),
+    ],
 )
 ```
 
+A unit whose `inputs` are positions — or `nothing`, meaning the whole row —
+declares no names, so a table handed to that model is refused rather than read by
+column order. `Matrix(X)` is how you ask for that reading deliberately.
+
 There is no exception for a table with a single column, which is why the
-`DataFrame` version of this tutorial's data declares `input_names` above. Its
+`DataFrame` version of this tutorial's data names the column its unit reads. Its
 order cannot be wrong, but its *name* still can: a one-input model handed a
 `humidity` column when it wanted `temp` is a mistake worth catching, and only a
 declared schema catches it. `Y` needs nothing extra there, since
@@ -230,7 +253,15 @@ row `t` of the other — only that they have the same number of rows. Naming the
 column that identifies an observation fixes that:
 
 ```julia
-ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn; input_names = [:ones], sample_key = :timestamp))
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    ApplicationDrivenLearning.ForecastModel(
+        inputs = [:ones],
+        architecture = Chain(Dense(1 => 1; bias=false)),
+        outputs = [θ],
+    );
+    sample_key = :timestamp,
+)
 
 X = DataFrame(timestamp = [10, 20, 30], ones = Float32[1, 1, 1])
 Y = DataFrame(timestamp = [30, 10, 20], θ = Float32[30, 10, 20])  # any order
@@ -252,11 +283,16 @@ rejected with an error naming the offending argument rather than failing later
 inside the solver.
 
 
-A simple forecast model with only one parameter can be defined as a `Flux.Dense` layer with just 1 weight and no bias. We can associate the predictive model with our ApplicationDrivenLearning model only if its output size matches the number of declared forecast variables.
+A simple forecast model with only one parameter can be defined as a `Flux.Dense` layer with just 1 weight and no bias. A [`ForecastModel`](@ref) pairs that architecture with the forecast variables it predicts, and `set_forecast_model` checks that between them the units predict every declared forecast variable exactly once.
 
 ```julia
-nn = Chain(Dense(1 => 1; bias=false))
-ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn))
+ApplicationDrivenLearning.set_forecast_model(
+    model,
+    ApplicationDrivenLearning.ForecastModel(
+        architecture = Chain(Dense(1 => 1; bias=false)),
+        outputs = [θ],
+    ),
+)
 ```
 
 Finally, the full model is trained with [`OptimMode`](modes.md#Optim-mode), which reaches any algorithm from the `Optim` package — here Nelder-Mead. `Optim` is already a dependency of ApplicationDrivenLearning, so it does not need to be installed, but it does need `using Optim` to name the algorithm.

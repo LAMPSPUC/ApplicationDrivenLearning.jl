@@ -76,28 +76,54 @@ end
     @test scale([1.0, 1.0]) ≈ [2.0 + 4.0, 3.0 + 5.0]
 end
 
-@testset "PredictiveModel from Chain with input_output_map" begin
+@testset "Forecast from units selecting input columns" begin
     m = ADL.Model()
     @variable(m, f[1:2], ADL.Forecast)
     chain = Flux.Chain(Flux.Dense(2 => 1)) |> f64
-    iomap = Dict([1, 2] => [f[1]], [1, 3] => [f[2]])
-    pm = ADL.PredictiveModel(chain, iomap)
+    # the same architecture predicting both variables, from a different column
+    # pair each: one copy per unit, so `input_size` is the widest column read
+    pm = ADL.FullForecastModel([
+        ADL.ForecastModel(
+            inputs = [1, 2],
+            architecture = chain,
+            outputs = [f[1]],
+        ),
+        ADL.ForecastModel(
+            inputs = [1, 3],
+            architecture = deepcopy(chain),
+            outputs = [f[2]],
+        ),
+    ])
     @test pm.input_size == 3
     @test pm.output_size == 2
     @test size(pm(ones(3, 4))) == (2, 4)
     @test length(pm(ones(3))) == 2
 
-    # mismatching map sizes must be rejected
-    @test_throws AssertionError ADL.PredictiveModel(chain, Dict([1] => [f[1]]))
+    # a unit whose `inputs` do not fit its architecture must be rejected, at the
+    # unit rather than at the first prediction
+    @test_throws ArgumentError ADL.ForecastModel(
+        inputs = [1],
+        architecture = chain,
+        outputs = [f[1]],
+    )
 end
 
-@testset "PredictiveModel with heterogeneous networks" begin
+@testset "Forecast with heterogeneous architectures" begin
     m = ADL.Model()
     @variable(m, f[1:3], ADL.Forecast)
-    # a Dense and a Chain in the same predictive model
-    nets = Any[Flux.Dense(2 => 1)|>f64, Flux.Chain(Flux.Dense(1 => 2))|>f64]
-    iomap = [Dict([1, 2] => [f[1]]), Dict([3] => [f[2], f[3]])]
-    pm = ADL.PredictiveModel(nets, iomap)
+    # a Dense and a Chain in the same forecast
+    pm = ADL.FullForecastModel([
+        ADL.ForecastModel(
+            inputs = [1, 2],
+            architecture = Flux.Dense(2 => 1) |> f64,
+            outputs = [f[1]],
+        ),
+        ADL.ForecastModel(
+            inputs = [3],
+            architecture = Flux.Chain(Flux.Dense(1 => 2)) |> f64,
+            outputs = [f[2], f[3]],
+        ),
+    ])
     @test pm.input_size == 3
     @test pm.output_size == 3
     @test size(pm(ones(3, 5))) == (3, 5)
@@ -110,7 +136,7 @@ end
     @test ADL.extract_params(pm) == ones(length(θ))
 end
 
-@testset "PredictiveModel with non-Dense layer types" begin
+@testset "Forecast with non-Dense layer types" begin
     m = ADL.Model()
     @variable(m, f[1:4], ADL.Forecast)
 
@@ -122,13 +148,23 @@ end
         Flux.Chain(Flux.Dense(2 => 3, tanh), Flux.Dense(3 => 1)) |> f64
     scale = Flux.Scale(2) |> f64
 
-    nets = Any[chain_bare, chain_fused, scale]
-    iomap = [
-        Dict([1] => [f[1]]),
-        Dict([2, 3] => [f[2]]),
-        Dict([1, 4] => [f[3], f[4]]),
-    ]
-    pm = ADL.PredictiveModel(nets, iomap)
+    pm = ADL.FullForecastModel([
+        ADL.ForecastModel(
+            inputs = [1],
+            architecture = chain_bare,
+            outputs = [f[1]],
+        ),
+        ADL.ForecastModel(
+            inputs = [2, 3],
+            architecture = chain_fused,
+            outputs = [f[2]],
+        ),
+        ADL.ForecastModel(
+            inputs = [1, 4],
+            architecture = scale,
+            outputs = [f[3], f[4]],
+        ),
+    ])
     @test pm.input_size == 4
     @test pm.output_size == 4
 
@@ -167,14 +203,53 @@ end
     @test after[(n1+n2+1):end] != before[(n1+n2+1):end]
 end
 
-@testset "set_forecast_model size check" begin
+@testset "set_forecast_model coverage checks" begin
     m = ADL.Model()
     @variable(m, f[1:2], ADL.Forecast)
-    @test_throws AssertionError ADL.set_forecast_model(
+
+    # a variable left without an architecture: named, rather than surfacing later
+    # as a prediction row nobody wrote
+    err = try
+        ADL.set_forecast_model(
+            m,
+            ADL.ForecastModel(
+                architecture = Flux.Dense(1 => 1),
+                outputs = [f[1]],
+            ),
+        )
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError
+    @test occursin("f[2]", err.msg)
+
+    # a variable of another model has no row of this one to be written to
+    other = ADL.Model()
+    @variable(other, g, ADL.Forecast)
+    @test_throws ArgumentError ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(Flux.Dense(1 => 3)),
+        [
+            ADL.ForecastModel(
+                inputs = [1],
+                architecture = Flux.Dense(1 => 1),
+                outputs = [f[1]],
+            ),
+            ADL.ForecastModel(
+                inputs = [1],
+                architecture = Flux.Dense(1 => 1),
+                outputs = [g],
+            ),
+        ],
     )
-    ADL.set_forecast_model(m, ADL.PredictiveModel(Flux.Dense(1 => 2)))
+
+    ADL.set_forecast_model(
+        m,
+        ADL.ForecastModel(
+            architecture = Flux.Dense(1 => 2),
+            outputs = [f[1], f[2]],
+        ),
+    )
     @test m.forecast.output_variables == m.forecast_vars
 end
 
@@ -212,8 +287,11 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d],
         ),
     )
     Xc = reshape([10.0, 20.0], 2, 1)
@@ -239,12 +317,14 @@ end
     # describe a run once with one function.
     Xt = ones(1, 1)
     build() = begin
-        m, _ = _build_newsvendor()
+        m, d_b = _build_newsvendor()
         ADL.set_forecast_model(
             m,
-            ADL.PredictiveModel(
-                Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
-                output_names = [:demand],
+            ADL.ForecastModel(
+                architecture = Chain(
+                    Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+                ),
+                outputs = [d_b => :demand],
             ),
         )
         return m
@@ -288,17 +368,23 @@ end
     m_dict, d_dict = _build_newsvendor()
     ADL.set_forecast_model(
         m_dict,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d_dict],
         ),
     )
     sol_dict = ADL.train!(m_dict, Xt, Dict(d_dict => Yvec), opt())
 
-    m_mat, _ = _build_newsvendor()
+    m_mat, d_mat = _build_newsvendor()
     ADL.set_forecast_model(
         m_mat,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d_mat],
         ),
     )
     sol_mat = ADL.train!(m_mat, Xt, reshape(Yvec, 1, 1), opt())
@@ -319,8 +405,11 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d],
         ),
     )
     sol = ADL.train!(
@@ -347,8 +436,11 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(1 => 1; bias = false, init = (s...) -> ones(s...)),
+            ),
+            outputs = [d],
         ),
     )
     Xb = ones(1, 1)
@@ -377,10 +469,11 @@ end
     m, d = _build_newsvendor()
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(
+        ADL.ForecastModel(
+            architecture = Chain(
                 Dense(1 => 1; bias = false, init = (s...) -> 0.5 .* ones(s...)),
             ),
+            outputs = [d],
         ),
     )
     Xn = ones(1, 1)
@@ -397,10 +490,11 @@ end
 
     ADL.set_forecast_model(
         m,
-        ADL.PredictiveModel(
-            Chain(
+        ADL.ForecastModel(
+            architecture = Chain(
                 Dense(1 => 1; bias = false, init = (s...) -> 0.5 .* ones(s...)),
             ),
+            outputs = [d],
         ),
     )
     sol2 = ADL.train!(m, Xn, Yn, opt)
@@ -409,7 +503,10 @@ end
 
 @testset "JuMP interface on ApplicationDrivenLearning.Model" begin
     m, d = _build_newsvendor()
-    ADL.set_forecast_model(m, ADL.PredictiveModel(Chain(Dense(1 => 1))))
+    ADL.set_forecast_model(
+        m,
+        ADL.ForecastModel(architecture = Chain(Dense(1 => 1)), outputs = [d]),
+    )
 
     @test JuMP.objective_sense(m) == MOI.MIN_SENSE
     @test JuMP.num_variables(m) ==

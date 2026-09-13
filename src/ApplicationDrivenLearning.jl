@@ -114,7 +114,7 @@ every access.
 mutable struct Model <: JuMP.AbstractModel
     plan::JuMP.Model
     assess::JuMP.Model
-    forecast::Union{PredictiveModel,Nothing}
+    forecast::Union{FullForecastModel,Nothing}
 
     # variable arrays
     policy_vars::Vector{Policy{JuMP.VariableRef}}
@@ -206,76 +206,116 @@ Return the `assess_policy_fix` constraints, which pin the assess
 assess_policy_fix_cons(model::Model) = model._assess_policy_fix
 
 """
-    set_forecast_model(model::Model, forecast::PredictiveModel)
+    set_forecast_model(model::Model, units; sample_key = nothing)
 
-Attach a predictive (forecast) model to `model`.
+Attach a forecast to `model`, described by [`ForecastModel`](@ref) units.
 
-The output size of `forecast` must match the number of [`Forecast`](@ref)
-variables declared on `model`. If it has no `input_output_map`, a trivial one
-mapping every input to every forecast variable is created. Its
-`output_variables` are always reordered to follow `model.forecast_vars`, so that
-the rows of a prediction line up with the forecast parameters of the plan model —
-and any `output_names` follow their variables through that reordering.
-
-The schema — `input_names`, `output_names` and `sample_key` — is declared on the
-[`PredictiveModel`](@ref) and nowhere else:
+`units` is one [`ForecastModel`](@ref) or a vector of them. Between them they
+must predict every [`Forecast`](@ref) variable declared on `model`, each exactly
+once and none belonging to another model — all three are checked here, naming
+whatever is wrong.
 
 ```julia
+model = ApplicationDrivenLearning.Model()
+@variable(model, demand, ApplicationDrivenLearning.Forecast)
+
 set_forecast_model(
     model,
-    PredictiveModel(
-        Flux.Chain(Flux.Dense(2 => 1));
-        input_names = [:temp, :hour],
+    ForecastModel(
+        inputs = [:temp, :hour],
+        architecture = Flux.Dense(2 => 1),
+        outputs = [demand],
     ),
 )
 ```
 
-This function used to accept a bare `Flux.Chain`/`Dense` and the same three
-keywords. It no longer does, because the keywords and the `PredictiveModel`
-fields of the same name were indexed by *different* orders — the keywords by
-`model.forecast_vars`, the fields by the predictive model's own
-`output_variables` — and supplying both silently picked one. There is now a
-single place to say it.
+Everything about the *data* is declared on the units: writing a unit's `inputs` as
+column names is what lets `X` be matched by name, and writing its `outputs` as
+`variable => :column` names the `Y` column holding a variable.
 
-Returns the stored [`PredictiveModel`](@ref).
+`sample_key` is the one thing that cannot live on a unit, and the only keyword
+here: it names the column that identifies a *row* rather than a column, so that
+realized values are looked up per sample instead of trusted to arrive in the same
+order as the input.
+
+The units' [`Forecast`](@ref) variables are reordered to follow
+`model.forecast_vars`, so that the rows of a prediction line up with the forecast
+parameters of the plan model, and their column names follow them.
+
+Returns the stored [`FullForecastModel`](@ref).
 """
-function set_forecast_model(model::Model, forecast::PredictiveModel)
-    @assert forecast.output_size == length(model.forecast_vars) "Output size of forecast model must match number of forecast variables"
+function set_forecast_model(model::Model, units::AbstractVector; kwargs...)
+    return set_forecast_model(model, FullForecastModel(units; kwargs...))
+end
 
-    input_output_map = forecast.input_output_map
-    if isnothing(input_output_map)
-        # no map: the single network reads the whole input and produces every
-        # forecast variable
-        input_output_map =
-            [Dict(collect(1:forecast.input_size) => model.forecast_vars)]
-    end
+function set_forecast_model(model::Model, unit::ForecastModel; kwargs...)
+    return set_forecast_model(model, [unit]; kwargs...)
+end
 
-    # the stored names align with the predictive model's own `output_variables`,
-    # so they have to follow those variables through the reordering below
-    output_names =
-        if isnothing(forecast.output_names) ||
-           isnothing(forecast.output_variables)
-            forecast.output_names
-        else
-            forecast.output_names[_find_elements_position(
-                forecast.output_variables,
-                model.forecast_vars,
-            )]
-        end
-
+function set_forecast_model(model::Model, forecast::FullForecastModel)
+    _assert_predicts_declared_variables(model, forecast)
     # rebuild unconditionally: `output_variables` must follow
     # `model.forecast_vars` so that the rows of a prediction line up with the
-    # plan model's forecast parameters
-    return model.forecast = PredictiveModel(
-        forecast.networks,
-        input_output_map,
+    # plan model's forecast parameters. Both the declared `Y` columns and each
+    # unit's `rows` have to follow their own variables through that reordering
+    perm =
+        _find_elements_position(forecast.output_variables, model.forecast_vars)
+    output_columns = if isnothing(forecast.output_columns)
+        nothing
+    else
+        forecast.output_columns[perm]
+    end
+    return model.forecast = FullForecastModel(
+        _reindexed_units(forecast.units, model.forecast_vars),
         model.forecast_vars,
         forecast.input_size,
         forecast.output_size;
         input_names = forecast.input_names,
-        output_names = output_names,
+        output_columns = output_columns,
         sample_key = forecast.sample_key,
     )
+end
+
+"""
+    _assert_predicts_declared_variables(model::Model, forecast::FullForecastModel)
+
+Throw unless the forecast predicts exactly the [`Forecast`](@ref) variables
+declared on `model`.
+
+Both halves matter and neither is implied by a count. An unpredicted variable
+leaves one row of every prediction uninitialized, and a variable belonging to
+another model has no row to be written to — both of which used to surface as an
+indexing failure deep in the prediction loop, or as a cost computed from
+uninitialized memory.
+"""
+function _assert_predicts_declared_variables(
+    model::Model,
+    forecast::FullForecastModel,
+)
+    declared = model.forecast_vars
+    predicted = forecast.output_variables
+    foreign = filter(!in(declared), predicted)
+    if !isempty(foreign)
+        throw(
+            ArgumentError(
+                "The forecast predicts $(length(foreign)) variable(s) that are " *
+                "not declared on this model: " *
+                "$(join(_forecast_labels(foreign), ", ")). A `Forecast` " *
+                "variable belongs to the model it was declared on.",
+            ),
+        )
+    end
+    unpredicted = filter(!in(predicted), declared)
+    if !isempty(unpredicted)
+        throw(
+            ArgumentError(
+                "No `ForecastModel` predicts the forecast variable(s) " *
+                "$(join(_forecast_labels(unpredicted), ", ")). Every forecast " *
+                "variable declared on the model needs exactly one.",
+            ),
+        )
+    end
+    return nothing
 end
 
 """
@@ -448,6 +488,26 @@ function train!(
     options::Options,
 )
     _assert_forecast_model_set(model)
+    # matrices are normalized too, for the reason given on `compute_cost`: the
+    # units may give their `Y` columns by position, and this is the only method a
+    # matrix reaches
+    Xm, Ym = _to_matrices(X, Y, model.forecast)
+    return _train_on_matrices(model, Xm, Ym, options)
+end
+
+"""
+    _train_on_matrices(model, X, Y, options)
+
+[`train!`](@ref) on data that is already normalized. Split out from the public
+method so that normalization happens exactly once, mirroring
+`_compute_cost_on_matrices`.
+"""
+function _train_on_matrices(
+    model::Model,
+    X::AbstractMatrix{<:Real},
+    Y::AbstractMatrix{<:Real},
+    options::Options,
+)
     _assert_model_is_enough(_parallel_backend(options.params))
 
     # the parallel backends call `_compute_single_step_cost` directly instead of
@@ -548,11 +608,12 @@ function train!(
 )
     _assert_forecast_model_set(model)
     Xm, Ym = _to_matrices(X, Y, model.forecast)
-    return train!(model, Xm, Ym, options)
+    return _train_on_matrices(model, Xm, Ym, options)
 end
 
 export Model,
-    PredictiveModel,
+    ForecastModel,
+    FullForecastModel,
     Plan,
     Assess,
     Policy,

@@ -7,7 +7,7 @@
 # - without chasing a constructor somewhere else in the file. The duplication is
 # the feature. `test_data_inputs.jl` is the opposite trade: helpers and edge cases.
 #
-# All five spell out the SAME problem and must produce the SAME cost,
+# All six spell out the SAME problem and must produce the SAME cost,
 # `[300.0, 450.0]`, so the differences between them are purely about how data is
 # handed over.
 #
@@ -75,8 +75,11 @@ _identity_1x1(s...) = ones(s...)
     set_silent(model)
     ADL.set_forecast_model(
         model,
-        ADL.PredictiveModel(
-            Chain(Dense(2 => 2; bias = false, init = _identity_2x2)),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(2 => 2; bias = false, init = _identity_2x2),
+            ),
+            outputs = [load_a, load_b],
         ),
     )
 
@@ -90,7 +93,8 @@ _identity_1x1(s...) = ones(s...)
         20.0 8.0
     ]   # ... and sample 2
     # Y column 1 is load_a, column 2 is load_b - that is, forecast declaration
-    # order. Nothing here says so; that is what the next variations fix.
+    # order. Nothing here says so; variation 6 is this same matrix with the order
+    # written down, and the named containers below say it a different way.
     Y = [
         12.0 4.0
         18.0 11.0
@@ -142,8 +146,11 @@ end
     set_silent(model)
     ADL.set_forecast_model(
         model,
-        ADL.PredictiveModel(
-            Chain(Dense(2 => 2; bias = false, init = _identity_2x2)),
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(2 => 2; bias = false, init = _identity_2x2),
+            ),
+            outputs = [load_a, load_b],
         ),
     )
 
@@ -168,7 +175,7 @@ end
     )
 end
 
-@testset "3. tables: X by input_names, Y by the forecast variable names" begin
+@testset "3. tables: X by the unit's input names, Y by the variable names" begin
     model = ADL.Model()
     @variable(model, g1 >= 0, ADL.Policy)
     @variable(model, g2 >= 0, ADL.Policy)
@@ -197,18 +204,21 @@ end
 
     set_optimizer(model, HiGHS.Optimizer)
     set_silent(model)
-    # `input_names` is the model's declared input schema: the network's first input
-    # is the `temp` column, its second the `wind` column. `Y` needs nothing, since
-    # `load_a` and `load_b` already name their own columns.
+    # naming the unit's `inputs` is what declares the input schema: the network's
+    # first input is the `temp` column, its second the `wind` column. `Y` needs
+    # nothing, since `load_a` and `load_b` already name their own columns.
     ADL.set_forecast_model(
         model,
-        ADL.PredictiveModel(
-            Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
-            input_names = [:temp, :wind],
+        ADL.ForecastModel(
+            inputs = [:temp, :wind],
+            architecture = Chain(
+                Dense(2 => 2; bias = false, init = _identity_2x2),
+            ),
+            outputs = [load_a, load_b],
         ),
     )
     @test model.forecast.input_names == [:temp, :wind]
-    @test isnothing(model.forecast.output_names)
+    @test isnothing(model.forecast.output_columns)
 
     # columns deliberately in the "wrong" order on both sides, plus a stray column
     X = DataFrame(wind = [5.0, 8.0], station = ["A", "B"], temp = [10.0, 20.0])
@@ -251,7 +261,7 @@ end
     ) ≈ _LINK_COST atol = 1e-6
 end
 
-@testset "4. one network per forecast, named in the map, with output_names" begin
+@testset "4. one network per forecast, each naming its own Y column" begin
     # Same problem, but the loads are declared as a CONTAINER - so they are named
     # `load[1]` and `load[2]`, which no data file is going to carry - and each is
     # predicted by its own network from its own column.
@@ -282,28 +292,34 @@ end
     set_optimizer(model, HiGHS.Optimizer)
     set_silent(model)
 
-    # `Symbol` keys put the input names where the wiring already is: network 1
-    # reads `temp` and predicts load[1]; network 2 reads `wind` and predicts
-    # load[2]. They are resolved to column positions at construction.
-    predictive = ADL.PredictiveModel(
-        [
-            Dense(1 => 1; bias = false, init = _identity_1x1),
-            Dense(1 => 1; bias = false, init = _identity_1x1),
-        ],
-        [Dict([:temp] => [load[1]]), Dict([:wind] => [load[2]])];
-        # the variables are called `load[1]` / `load[2]`, so name the Y columns
-        output_names = [:load_a, :load_b],
-    )
-    # derived from the map, alphabetically: temp is column 1, wind column 2
+    # each unit says what it reads and what it predicts: unit 1 reads `temp` and
+    # predicts load[1], unit 2 reads `wind` and predicts load[2]. The names are
+    # resolved to column positions when the units are assembled.
+    predictive = ADL.FullForecastModel([
+        ADL.ForecastModel(
+            inputs = [:temp],
+            architecture = Dense(1 => 1; bias = false, init = _identity_1x1),
+            # the variables are called `load[1]` / `load[2]`, so name the Y column
+            outputs = [load[1] => :load_a],
+        ),
+        ADL.ForecastModel(
+            inputs = [:wind],
+            architecture = Dense(1 => 1; bias = false, init = _identity_1x1),
+            outputs = [load[2] => :load_b],
+        ),
+    ])
+    # derived from the units, in order of first appearance
     @test predictive.input_names == [:temp, :wind]
-    @test predictive.input_output_map[1] == Dict([1] => [load[1]])
-    @test predictive.input_output_map[2] == Dict([2] => [load[2]])
+    @test predictive.units[1].inputs == [1]
+    @test predictive.units[1].outputs == [load[1]]
+    @test predictive.units[2].inputs == [2]
+    @test predictive.units[2].outputs == [load[2]]
 
     ADL.set_forecast_model(model, predictive)
     @test [
         ADL._forecast_base_name(f) for f in model.forecast.output_variables
     ] == ["load[1]", "load[2]"]
-    @test model.forecast.output_names == [:load_a, :load_b]
+    @test model.forecast.output_columns == [:load_a, :load_b]
 
     X = DataFrame(wind = [5.0, 8.0], temp = [10.0, 20.0])
     Y = DataFrame(load_b = [4.0, 11.0], load_a = [12.0, 18.0])
@@ -366,11 +382,14 @@ end
     # feature: the network still takes 2 inputs, `temp` and `wind`.
     ADL.set_forecast_model(
         model,
-        ADL.PredictiveModel(
-            Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
-            input_names = [:temp, :wind],
-            sample_key = :hour,
-        ),
+        ADL.ForecastModel(
+            inputs = [:temp, :wind],
+            architecture = Chain(
+                Dense(2 => 2; bias = false, init = _identity_2x2),
+            ),
+            outputs = [load_a, load_b],
+        );
+        sample_key = :hour,
     )
     @test model.forecast.input_size == 2
     @test model.forecast.sample_key == :hour
@@ -434,14 +453,17 @@ end
     )
     set_optimizer(unkeyed, HiGHS.Optimizer)
     set_silent(unkeyed)
-    # `output_names` only because the variables had to be renamed to avoid
-    # clashing with the ones above; it lets this model read the very same tables
+    # the `Y` columns are named only because the variables had to be renamed to
+    # avoid clashing with the ones above; it lets this model read the very same
+    # tables
     ADL.set_forecast_model(
         unkeyed,
-        ADL.PredictiveModel(
-            Chain(Dense(2 => 2; bias = false, init = _identity_2x2));
-            input_names = [:temp, :wind],
-            output_names = [:load_a, :load_b],
+        ADL.ForecastModel(
+            inputs = [:temp, :wind],
+            architecture = Chain(
+                Dense(2 => 2; bias = false, init = _identity_2x2),
+            ),
+            outputs = [load_a_u => :load_a, load_b_u => :load_b],
         ),
     )
     off_by_one = ADL.compute_cost(
@@ -452,4 +474,131 @@ end
         false,
     )
     @test !isapprox(off_by_one, _LINK_COST; atol = 1e-6)
+end
+
+@testset "6. matrices, with the Y column order written down" begin
+    # Variation 1 again, except that the `outputs` say which column of `Y` holds
+    # which variable. Same problem, same cost - the difference is that the layout
+    # is now declared instead of inferred from declaration order, so inserting a
+    # `@variable` above these two cannot silently change what column 1 means.
+    model = ADL.Model()
+    @variable(model, g1 >= 0, ADL.Policy)
+    @variable(model, g2 >= 0, ADL.Policy)
+    @variable(model, load_a, ADL.Forecast)
+    @variable(model, load_b, ADL.Forecast)
+
+    @constraints(ADL.Plan(model), begin
+        g1.plan >= load_a.plan
+        g2.plan >= load_b.plan
+    end)
+    @objective(ADL.Plan(model), Min, 10 * g1.plan + 20 * g2.plan)
+
+    @variables(ADL.Assess(model), begin
+        s1 >= 0
+        s2 >= 0
+    end)
+    @constraints(ADL.Assess(model), begin
+        s1 >= load_a.assess - g1.assess
+        s2 >= load_b.assess - g2.assess
+    end)
+    @objective(
+        ADL.Assess(model),
+        Min,
+        10 * g1.assess + 20 * g2.assess + 50 * s1 + 30 * s2
+    )
+
+    set_optimizer(model, HiGHS.Optimizer)
+    set_silent(model)
+    # `Y` arrives with the loads the other way round, and this says so
+    ADL.set_forecast_model(
+        model,
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(2 => 2; bias = false, init = _identity_2x2),
+            ),
+            outputs = [load_a => 2, load_b => 1],
+        ),
+    )
+    @test model.forecast.output_columns == [2, 1]
+
+    X = [
+        10.0 5.0
+        20.0 8.0
+    ]
+    # column 1 is load_b, column 2 is load_a - the reverse of variation 1
+    Y = [
+        4.0 12.0
+        11.0 18.0
+    ]
+
+    @test ADL.compute_cost(model, X, Y, false, false) ≈ _LINK_COST atol = 1e-6
+    @test ADL.compute_cost(model, X, Y) ≈ sum(_LINK_COST) / 2 atol = 1e-6
+
+    # and the declaration is what makes it right: variation 1's column order now
+    # produces a different number instead of quietly being accepted
+    @test !isapprox(
+        ADL.compute_cost(model, X, Y[:, [2, 1]], false, false),
+        _LINK_COST;
+        atol = 1e-6,
+    )
+
+    # a gap is allowed, exactly as it is for `inputs`: the unread column has to be
+    # there and is not looked at
+    gapped = ADL.Model()
+    @variable(gapped, h1 >= 0, ADL.Policy)
+    @variable(gapped, h2 >= 0, ADL.Policy)
+    @variable(gapped, load_a_g, ADL.Forecast)
+    @variable(gapped, load_b_g, ADL.Forecast)
+    @constraints(ADL.Plan(gapped), begin
+        h1.plan >= load_a_g.plan
+        h2.plan >= load_b_g.plan
+    end)
+    @objective(ADL.Plan(gapped), Min, 10 * h1.plan + 20 * h2.plan)
+    @variables(ADL.Assess(gapped), begin
+        t1 >= 0
+        t2 >= 0
+    end)
+    @constraints(ADL.Assess(gapped), begin
+        t1 >= load_a_g.assess - h1.assess
+        t2 >= load_b_g.assess - h2.assess
+    end)
+    @objective(
+        ADL.Assess(gapped),
+        Min,
+        10 * h1.assess + 20 * h2.assess + 50 * t1 + 30 * t2
+    )
+    set_optimizer(gapped, HiGHS.Optimizer)
+    set_silent(gapped)
+    ADL.set_forecast_model(
+        gapped,
+        ADL.ForecastModel(
+            architecture = Chain(
+                Dense(2 => 2; bias = false, init = _identity_2x2),
+            ),
+            outputs = [load_a_g => 1, load_b_g => 3],
+        ),
+    )
+    Yg = [
+        12.0 -999.0 4.0
+        18.0 -999.0 11.0
+    ]
+    @test ADL.compute_cost(gapped, X, Yg, false, false) ≈ _LINK_COST atol = 1e-6
+    # ... and a `Y` that does not reach column 3 is an error rather than a guess
+    @test_throws ArgumentError ADL.compute_cost(
+        gapped,
+        X,
+        Yg[:, 1:2],
+        false,
+        false,
+    )
+
+    # a named container cannot be matched against positions: its columns have
+    # names, and matching those by order is what the rule refuses
+    @test_throws ArgumentError ADL.compute_cost(
+        model,
+        X,
+        DataFrame(load_a = [12.0, 18.0], load_b = [4.0, 11.0]),
+        false,
+        false,
+    )
 end

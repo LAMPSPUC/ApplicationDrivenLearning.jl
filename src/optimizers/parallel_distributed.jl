@@ -53,11 +53,15 @@ addprocs(4)
 @everywhere using ApplicationDrivenLearning, HiGHS, Flux
 @everywhere function build_case()
     m = ApplicationDrivenLearning.Model()
-    # ... variables, constraints, objectives ...
+    @variable(m, demand, ApplicationDrivenLearning.Forecast)
+    # ... policy variables, constraints, objectives ...
     set_optimizer(m, HiGHS.Optimizer)
     ApplicationDrivenLearning.set_forecast_model(
         m,
-        ApplicationDrivenLearning.PredictiveModel(Chain(Dense(1 => 1))),
+        ApplicationDrivenLearning.ForecastModel(
+            architecture = Dense(1 => 1),
+            outputs = [demand],
+        ),
     )
     return m
 end
