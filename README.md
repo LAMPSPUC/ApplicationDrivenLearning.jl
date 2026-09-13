@@ -11,17 +11,12 @@ ApplicationDrivenLearning.jl is a Julia package for training time series models 
 ## Usage
 
 ```julia
-import Pkg
-
-Pkg.add("https://github.com/LAMPSPUC/ApplicationDrivenLearning.jl")
-
 using ApplicationDrivenLearning
+using Flux
+using JuMP
+import HiGHS
 
-## Single power plan problem
-
-# data
-X = reshape([1 1], (2, 1))
-Y = reshape([0 2], (2, 1))
+## Single power plant problem
 
 # main model and policy / forecast variables
 model = ApplicationDrivenLearning.Model()
@@ -60,6 +55,11 @@ set_silent(model)
 nn = Chain(Dense(1 => 1; bias=false))
 ApplicationDrivenLearning.set_forecast_model(model, nn)
 
+# data: `X` is a (samples x inputs) matrix and `Y` maps each forecast
+# variable to its vector of realized values
+X = reshape([1.0, 1.0], (2, 1))
+Y = Dict(θ => [0.0, 2.0])
+
 # training and getting solution
 solution = ApplicationDrivenLearning.train!(
     model,
@@ -74,7 +74,12 @@ print(solution.params)
 
 ## Installation
 
-This package is **not yet** registered so if you want to use or test the code clone this repo and include source code from `src` directory.
+ApplicationDrivenLearning is a registered package and can be installed with Julia's built-in package manager:
+
+```julia
+import Pkg
+Pkg.add("ApplicationDrivenLearning")
+```
 
 ## Contributing
 

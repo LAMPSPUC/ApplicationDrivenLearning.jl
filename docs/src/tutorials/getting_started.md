@@ -1,12 +1,12 @@
 # Getting started with ApplicationDrivenLearning
 
-This is a quick introduction modeling and training end-to-end forecast models with ApplicationDrivenLearning.
+This is a quick introduction to modeling and training end-to-end forecast models with ApplicationDrivenLearning.
 
 ## A first example
 
-We will train a energy load predictive model that is applied to a one-hour agead generation planning problem in a power system consisting of a single plant with the following characteristics: a production capacity of 4 MW and a generation cost of R$10/MWh.
+We will train an energy load predictive model that is applied to a one-hour-ahead generation planning problem in a power system consisting of a single plant with the following characteristics: a production capacity of 4 MW and a generation cost of R\$10/MWh.
 
-The available data is very limited: we don't have any auxiliar variable and just two samples of past demand.
+The available data is very limited: we don't have any auxiliary variable and just two samples of past demand.
 
 Here is the complete code to model, train and extract the parameters of the predictive model:
 
@@ -156,7 +156,7 @@ nn = Chain(Dense(1 => 1; bias=false))
 ApplicationDrivenLearning.set_forecast_model(model, nn)
 ```
 
-Finally, the full model is trained using the `NelderMeadMode`. For using this mode, it is necessary to install the `Optim` package previously, but it doesn't need to be installed.
+Finally, the full model is trained using the `NelderMeadMode`. This mode relies on the `Optim` package, which is already a dependency of ApplicationDrivenLearning, so it does not need to be installed or loaded separately.
 
 ```julia
 solution = ApplicationDrivenLearning.train!(

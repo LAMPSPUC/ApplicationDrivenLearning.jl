@@ -11,7 +11,12 @@ Documenter.makedocs(;
         "Tutorials" =>
             joinpath.(
                 "tutorials",
-                ["getting_started.md", "modes.md", "custom_forecast.md"],
+                [
+                    "getting_started.md",
+                    "modes.md",
+                    "mpi_modes.md",
+                    "custom_forecast.md",
+                ],
             ),
         "Examples" => joinpath.("examples", ["scheduling.md", "newsvendor.md"]),
         "API Reference" => "reference.md",

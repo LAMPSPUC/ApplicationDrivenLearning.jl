@@ -2,7 +2,6 @@
 ApplicationDrivenLearning = "0856f1c8-ef17-4e14-9230-2773e47a789e"
 BilevelJuMP = "485130c0-026e-11ea-0f1a-6992cd14145c"
 DiffOpt = "930fe3bc-9c6b-11ea-2d94-6184641e85e7"
-Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
 HiGHS = "87dc4568-4c63-4d18-b0c0-bb2238e4078b"
 JobQueueMPI = "32d208e1-246e-420c-b6ff-18b71b410923"

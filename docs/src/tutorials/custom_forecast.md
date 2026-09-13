@@ -7,7 +7,7 @@ The basic approach to define a forecast model is to use a `Chain` from the `Flux
 The connection between predictive model outputs and plan model inputs is not always a straightforward one. Because of this, the definition of a `PredictiveModel` structure, used to define the predictive model in the ApplicationDrivenLearning.jl package, includes the `input_output_map` parameter.
 This parameter allows users to declare an explicit mapping between the outputs produced by Flux models and the forecast variables used in the planning model. This is useful in contexts where the same prediction logic can be applied across several entities (such as production units or geographical locations), promoting model reuse and computational and parameter efficiency.
 
-Consider a scenario where the input dataset contains 3 variables (for example expected temperature on location 1, expected temperature on location 2 and weekday), there are 2 forecast variables (energy demand on the two locations of interest) and the forecast model should use only the expected temperature of a location to predict it’s demand. That means we would make two predictions using the same model and concatenate those values. This can be easily achieved with a dictionary mapping the data input and forecast variable indexes.
+Consider a scenario where the input dataset contains 3 variables (for example expected temperature on location 1, expected temperature on location 2 and weekday), there are 2 forecast variables (energy demand on the two locations of interest) and the forecast model should use only the expected temperature of a location to predict its demand. That means we would make two predictions using the same model and concatenate those values. This can be easily achieved with a dictionary mapping the data input and forecast variable indexes.
 
 ```julia
 model = ApplicationDrivenLearning.Model()
@@ -67,7 +67,7 @@ input_output_map = [
     Dict(
         [1, 3] => [demand[1]],
         [2, 3] => [demand[2]]
-    ), # input indexes 1,2,3 are used to compute demand forecast vars separately with 1st Flux.Dense object
+    ), # input indexes 1,3 and 2,3 are used to compute each demand forecast var separately with the 1st Flux.Dense object
     Dict(
         [4] => price
     ), # input index 4 is used to compute both price forecast vars with 2nd Flux.Dense object

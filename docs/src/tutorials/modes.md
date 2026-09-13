@@ -1,6 +1,6 @@
 # Training modes
 
-Training a model with ApplicationDrivenLearning is done by calling the `train!` function. This function has a `mode` argument that represents the algorithm used to train the model. In this tutorial, we will show how to use the different modes and explore the trade-off between them.
+Training a model with ApplicationDrivenLearning is done by calling the `train!` function. This function takes an `Options` object whose first argument is the *mode*, i.e. the algorithm used to train the model; the remaining keyword arguments configure that algorithm. In this tutorial, we will show how to use the different modes and explore the trade-off between them.
 
 The data used in this tutorial is the same as in the [getting started](getting_started.md) tutorial so all the code shown in this page assumes that the full model (`ApplicationDrivenLearning.Model`) is already defined.
 
@@ -12,7 +12,7 @@ The bilevel mode mounts the bilevel optimization problem relative to training th
 
 - `optimizer`: JuMP.jl optimizer used to solve the bilevel model using BilevelJuMP.jl.
 - `mode`: The mode to use for the bilevel optimization problem. It can be any of the modes supported by the `BilevelJuMP` package.
-- `silent`: Whether to print the progress of the bilevel optimization problem.
+- `silent`: When `true`, suppresses the solver output of the bilevel optimization problem.
 
 ### Example
 
@@ -217,15 +217,17 @@ parameter values until the end or convergence.
 - `rule`: The optimizer for the gradient algorithm. Has to be an instance of optimization
 rules from Flux.jl.
 - `epochs`: The number of iterations to run the gradient algorithm.
-- `batch_size`: The batch size to use for the gradient algorithm. If `-1`, the entire dataset is used.
+- `batch_size`: The batch size to use for the gradient algorithm. If `-1`, the entire dataset is used. When positive, each epoch draws `batch_size` sample indexes uniformly *with replacement*, so a batch may repeat samples and an epoch does not sweep the whole dataset.
 - `verbose`: Whether to print the progress of the gradient algorithm.
 - `compute_cost_every`: Allows for cost computation of every sample to be run only
 after a specified number of epochs. This enables faster iterations with the drawback of
 possibly missing sets of parameters with low associated cost.
 - `time_limit`: The time limit for the gradient algorithm in seconds.
-- `g_tol`: Convergence condition on the infinity norm of the per-sample cost gradients with respect to the forecasts (the maximum absolute entry over all samples and outputs). Below, we illustrate the use of NelderMeadMode to optimize the predictive model used in the ongoing example.
+- `g_tol`: Convergence condition on the infinity norm of the per-sample cost gradients with respect to the forecasts (the maximum absolute entry over all samples and outputs). Training stops as soon as this norm falls below `g_tol`. The default is `0`, which effectively disables the check.
 
 ### Example
+
+Below, we illustrate the use of `GradientMode` to optimize the predictive model used in the ongoing example.
 
 ```julia
 julia> opt = ApplicationDrivenLearning.Options(

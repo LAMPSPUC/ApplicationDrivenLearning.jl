@@ -19,7 +19,7 @@ The plan model will be run considering the demand `d` equal to the output of the
 
 ## Data
 
-We will model two separate items. One of the items presents a low overstocking cost and the other presents a low under-stocking cost, generating different incentives that a decision maker could explore. This is achieved manipulating the costs:
+We will model two separate items. One of the items presents a low overstocking cost and the other presents a low understocking cost, generating different incentives that a decision maker could explore. This is achieved manipulating the costs:
 
 ```math
 i=1 \longrightarrow c=10; \quad q = 19;\quad r = 9
@@ -157,7 +157,7 @@ After training, we can check the cost of the solution found by the gradient mode
 
 ```julia
 julia> model.forecast(x_d[1,:])
-2-element ApplicationDrivenLearning.VariableIndexedVector{Float32}:
+2-element Vector{Float32}:
  88.69701
  11.626293
 ```

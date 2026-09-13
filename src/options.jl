@@ -43,12 +43,24 @@ gradient optimization method
 
 # Parameters
 
-  - `rule` is the optimiser object to be used in the gradient optimization process.
-  - 'epochs' is the number of epochs to be used in the gradient optimization process.
-  - 'batch_size' is the batch size to be used in the gradient optimization process.
-  - 'verbose' is the flag of whether to print the training process.
-  - 'compute_cost_every' is the epoch frequency for computing the cost and evaluating best solution.
-  - 'time_limit' is the time limit for the training process.
+  - `rule` is the Flux/Optimisers rule to be used in the gradient optimization
+    process. Defaults to `Flux.Descent()`.
+  - `epochs` is the number of epochs to be used in the gradient optimization
+    process. Defaults to `100`.
+  - `batch_size` is the batch size to be used in the gradient optimization
+    process. Defaults to `-1`, meaning the full dataset is used at every epoch.
+    When positive, each epoch draws `batch_size` sample indexes uniformly *with
+    replacement*, so a batch may repeat samples and an epoch does not sweep the
+    whole dataset.
+  - `verbose` is the flag of whether to print the training process. Defaults to
+    `true`.
+  - `compute_cost_every` is the epoch frequency for computing the cost and
+    evaluating best solution. Defaults to `1`.
+  - `time_limit` is the time limit for the training process, in seconds.
+    Defaults to `Inf`.
+  - `g_tol` is the tolerance on the infinity norm of the cost gradients with
+    respect to the forecasts, below which training stops. Defaults to `0`,
+    which disables the check.
     ...
 """
 struct GradientMode <: AbstractOptimizationMode end
@@ -56,14 +68,36 @@ struct GradientMode <: AbstractOptimizationMode end
 """
     NelderMeadMPIMode <: AbstractOptimizationMode
 
-MPI implementation of NelderMeadMode.
+MPI implementation of [`NelderMeadMode`](@ref), which distributes the
+per-sample cost evaluations across MPI processes.
+
+...
+
+# Parameters
+
+  - `mpi_finalize::Bool` controls whether `MPI.Finalize()` is called at the end
+    of training. Defaults to `true`.
+  - Any other parameter accepted by `Optim.Options`. Unlike
+    [`NelderMeadMode`](@ref), `initial_simplex` and `parameters` are not
+    supported.
+    ...
 """
 struct NelderMeadMPIMode <: AbstractOptimizationMode end
 
 """
     GradientMPIMode <: AbstractOptimizationMode
 
-MPI implementation of GradientMode.
+MPI implementation of [`GradientMode`](@ref), which distributes the per-sample
+cost and gradient evaluations across MPI processes.
+
+...
+
+# Parameters
+
+  - The same parameters as [`GradientMode`](@ref).
+  - `mpi_finalize::Bool` controls whether `MPI.Finalize()` is called at the end
+    of training. Defaults to `true`.
+    ...
 """
 struct GradientMPIMode <: AbstractOptimizationMode end
 
@@ -72,6 +106,9 @@ struct GradientMPIMode <: AbstractOptimizationMode end
 
 Options struct to hold optimization mode and mode parameters.
 
+`mode` must be a subtype of `AbstractOptimizationMode` (the type itself, not
+an instance); the accepted keyword arguments are documented on each mode.
+
 ...
 
 # Example
@@ -79,7 +116,7 @@ Options struct to hold optimization mode and mode parameters.
 ```julia
 options = Options(
     GradientMode;
-    rule = Optim.RMSProp(0.01),
+    rule = Flux.RMSProp(0.01),
     epochs = 100,
     batch_size = 10,
 )
@@ -92,7 +129,7 @@ struct Options
     params::Dict{Symbol,Any}
 
     function Options(mode; params...)
-        if mode <: AbstractOptimizationMode
+        if mode isa Type && mode <: AbstractOptimizationMode
             return new(mode, Dict(params))
         else
             throw(

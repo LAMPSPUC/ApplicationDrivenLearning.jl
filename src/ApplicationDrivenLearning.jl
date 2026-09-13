@@ -41,15 +41,16 @@ end
 """
     Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
 
-Allow accessing `.plan` and `.assess` on arrays of Policy variables.
-Returns an array of the corresponding field values.
-Preserves all other properties by falling back to getfield.
+Allow accessing `.plan` and `.assess` on arrays of [`Policy`](@ref) variables.
+Returns an array of the corresponding field values, preserving the shape and
+axes of `arr` (so `x.plan[i]` always refers to the same element as `x[i].plan`).
+Preserves all other properties by falling back to `getfield`.
 """
 function Base.getproperty(arr::AbstractArray{<:Policy}, sym::Symbol)
     if sym === :plan
-        return [x.plan for x in arr]
+        return map(x -> x.plan, arr)
     elseif sym === :assess
-        return [x.assess for x in arr]
+        return map(x -> x.assess, arr)
     else
         # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
         return getfield(arr, sym)
@@ -59,15 +60,16 @@ end
 """
     Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
 
-Allow accessing `.plan` and `.assess` on arrays of Forecast variables.
-Returns an array of the corresponding field values.
-Preserves all other properties by falling back to getfield.
+Allow accessing `.plan` and `.assess` on arrays of [`Forecast`](@ref)
+variables. Returns an array of the corresponding field values, preserving the
+shape and axes of `arr` (so `d.plan[i]` always refers to the same element as
+`d[i].plan`). Preserves all other properties by falling back to `getfield`.
 """
 function Base.getproperty(arr::AbstractArray{<:Forecast}, sym::Symbol)
     if sym === :plan
-        return [x.plan for x in arr]
+        return map(x -> x.plan, arr)
     elseif sym === :assess
-        return [x.assess for x in arr]
+        return map(x -> x.assess, arr)
     else
         # Fallback to original behavior for all other properties (e.g., .data, .axes for JuMP containers)
         return getfield(arr, sym)
@@ -114,50 +116,74 @@ mutable struct Model <: JuMP.AbstractModel
 end
 
 """
-Returns vector of policy variables from plan model.
+    plan_policy_vars(model::Model)
+
+Return the vector of [`Policy`](@ref) variables that belong to the plan model,
+in declaration order.
 """
 function plan_policy_vars(model::Model)
     return [v.plan for v in model.policy_vars]
 end
 
 """
-Returns vector of policy variables from assess model.
+    assess_policy_vars(model::Model)
+
+Return the vector of [`Policy`](@ref) variables that belong to the assess
+model, in declaration order (matching [`plan_policy_vars`](@ref)).
 """
 function assess_policy_vars(model::Model)
     return [v.assess for v in model.policy_vars]
 end
 
 """
-Returns vector of forecast variables from plan model.
+    plan_forecast_vars(model::Model)
+
+Return the vector of [`Forecast`](@ref) variables that belong to the plan
+model, in declaration order.
 """
 function plan_forecast_vars(model::Model)
     return [v.plan for v in model.forecast_vars]
 end
 
 """
-Returns vector of forecast variables from assess model.
+    assess_forecast_vars(model::Model)
+
+Return the vector of [`Forecast`](@ref) variables that belong to the assess
+model, in declaration order (matching [`plan_forecast_vars`](@ref)).
 """
 function assess_forecast_vars(model::Model)
     return [v.assess for v in model.forecast_vars]
 end
 
 """
-Sets Chain, Dense or custom PredictiveModel object as
-forecast model.
+    set_forecast_model(model::Model, network)
+
+Attach a predictive (forecast) model to `model`. `network` may be a
+`Flux.Chain`, a `Flux.Dense` or an already built [`PredictiveModel`](@ref);
+the two former are wrapped into a `PredictiveModel` automatically.
+
+The output size of the predictive model must match the number of
+[`Forecast`](@ref) variables declared on `model`. If the predictive model has
+no `input_output_map`, a trivial one mapping every input to every forecast
+variable is created. The stored model's `output_variables` are always
+reordered to follow `model.forecast_vars`, so that the rows of a prediction
+line up with the forecast parameters of the plan model.
+
+Returns the stored [`PredictiveModel`](@ref).
 """
 function set_forecast_model(
     model::Model,
     network::Union{PredictiveModel,Flux.Chain,Flux.Dense},
 )
-    if typeof(network) == PredictiveModel
+    if network isa PredictiveModel
         forecast = network
     else
         forecast = PredictiveModel(network)
     end
-    @assert forecast.output_size == size(model.forecast_vars, 1) "Output size of forecast model must match number of forecast variables"
+    @assert forecast.output_size == length(model.forecast_vars) "Output size of forecast model must match number of forecast variables"
 
     # set input_output_map of forecast model if not set
-    if forecast.input_output_map == nothing
+    if isnothing(forecast.input_output_map)
         forecast = PredictiveModel(
             deepcopy(forecast.networks),
             [Dict(collect(1:forecast.input_size) => model.forecast_vars)],
@@ -168,7 +194,7 @@ function set_forecast_model(
     end
 
     # make sure the same order apply on model.forecast_vars and model.forecast.output_variables
-    if sum(forecast.output_variables .!= model.forecast_vars) > 0
+    if any(forecast.output_variables .!= model.forecast_vars)
         forecast = PredictiveModel(
             forecast.networks,
             forecast.input_output_map,
@@ -182,24 +208,34 @@ function set_forecast_model(
 end
 
 """
-Creates new forecast variables to plan model using MOI.Parameter
-and new constraint fixing to original forecast variables.
+    _build_plan_model_forecast_params(model::Model)
+
+Turn the plan model's [`Forecast`](@ref) variables into `MOI.Parameter`
+variables (initialised at zero) and record them in
+`model.plan_forecast_params`. Their values are then set to the predictive
+model output at every cost evaluation, and DiffOpt differentiates the plan
+model with respect to them.
 """
-function build_plan_model_forecast_params(model::Model)
+function _build_plan_model_forecast_params(model::Model)
     # adds parametrized forecast variables using MOI.Parameter
-    forecast_size = size(model.forecast_vars)[1]
+    forecast_size = length(model.forecast_vars)
     model.plan_forecast_params = plan_forecast_vars(model)
-    @constraint(
+    return @constraint(
         model.plan,
         model.plan_forecast_params .∈ MOI.Parameter.(zeros(forecast_size))
     )
 end
 
 """
-Creates new constraint to assess model that fixes policy variables.
+    _build_assess_model_policy_constraint(model::Model)
+
+Add the `assess_policy_fix` constraint to the assess model, which pins each
+assess [`Policy`](@ref) variable to the value chosen by the plan model. The
+right-hand side is updated at every cost evaluation, and its dual is the
+gradient of the assessed cost with respect to the policy.
 """
-function build_assess_model_policy_constraint(model::Model)
-    @constraint(
+function _build_assess_model_policy_constraint(model::Model)
+    return @constraint(
         model.assess,
         assess_policy_fix,
         assess_policy_vars(model) .== 0
@@ -207,18 +243,21 @@ function build_assess_model_policy_constraint(model::Model)
 end
 
 """
-Calls functions that set new variables and constraints that are
-necessary to cost computation.
+    _build(model::Model)
+
+Add the variables and constraints required for cost computation to the plan
+and assess models. Called automatically by [`compute_cost`](@ref); repeated
+calls are no-ops.
 """
-function build(model::Model)
+function _build(model::Model)
     if model.build
         return
     end
     model.build = true
 
     # build plan model
-    build_plan_model_forecast_params(model)
-    return build_assess_model_policy_constraint(model)
+    _build_plan_model_forecast_params(model)
+    return _build_assess_model_policy_constraint(model)
 end
 
 include("jump.jl")
@@ -232,11 +271,16 @@ include("optimizers/gradient_mpi.jl")
 include("optimizers/bilevel.jl")
 
 """
-    dict_to_var_indexed_matrix(data::Dict{<:Forecast,<:Vector}, row_index::Vector{<:Forecast})
+    _dict_to_var_indexed_matrix(data::Dict{<:Forecast,<:Vector}, row_index::Vector{<:Forecast})
 
-Transforms dictionary data into ordered-columns matrix
+Transform a dictionary that maps [`Forecast`](@ref) variables to their
+realized series into a `(samples x variables)` matrix whose columns follow the
+order of `row_index`.
+
+Every variable in `row_index` must be a key of `data`, and all series must
+have the same length.
 """
-function dict_to_var_indexed_matrix(
+function _dict_to_var_indexed_matrix(
     data::Dict{<:Forecast,<:Vector},
     row_index::Vector{<:Forecast},
 )
@@ -244,39 +288,94 @@ function dict_to_var_indexed_matrix(
     tp = eltype(data[row_index[1]])
     Y = Matrix{tp}(undef, n, length(row_index))
     for (i, f) in enumerate(row_index)
+        @assert length(data[f]) == n "All forecast variable series must have the same length"
         Y[:, i] = data[f]
     end
     return Y
 end
 
 """
-    train!(model, X, y, options)
+    train!(model::Model, X::Matrix{<:Real}, Y::Matrix{<:Real}, options::Options)
+    train!(model::Model, X::Matrix{<:Real}, Y_dict::Dict{<:Forecast,<:Vector}, options::Options)
 
-Train model using given data and options.
+Train the predictive model of `model` so that it minimizes the assessed cost
+of the application.
+
+...
+
+# Arguments
+
+  - `model::ApplicationDrivenLearning.Model`: model to train. Its forecast
+    model must have been set with [`set_forecast_model`](@ref).
+  - `X::Matrix{<:Real}`: input data of size `(T, input_size)`.
+  - `Y`: realized values, either a `(T, output_size)` matrix whose columns
+    follow the predictive model output order, or a dictionary mapping each
+    [`Forecast`](@ref) variable to its length-`T` series.
+  - `options::Options`: training mode and its parameters.
+
+Returns a [`Solution`](@ref) with the best cost found and the corresponding
+parameter vector. The predictive model of `model` is updated in place with
+those parameters.
+...
 """
+function train!(
+    model::Model,
+    X::Matrix{<:Real},
+    Y::Matrix{<:Real},
+    options::Options,
+)
+    if isnothing(model.forecast)
+        throw(
+            ArgumentError(
+                "No forecast model set. Call set_forecast_model first.",
+            ),
+        )
+    end
+
+    # the MPI modes call `_compute_single_step_cost` directly instead of going
+    # through `compute_cost`, so the parameters and the policy-fixing
+    # constraint have to be in place before training starts
+    _build(model)
+
+    y = Y
+
+    if options.mode == NelderMeadMode
+        return _train_with_nelder_mead!(model, X, y, options.params)
+    elseif options.mode == GradientMode
+        return _train_with_gradient!(model, X, y, options.params)
+    elseif options.mode == NelderMeadMPIMode
+        return _train_with_nelder_mead_mpi!(model, X, y, options.params)
+    elseif options.mode == GradientMPIMode
+        return _train_with_gradient_mpi!(model, X, y, options.params)
+    elseif options.mode == BilevelMode
+        return _solve_bilevel(model, X, y, options.params)
+    else
+        # should never get here: Options rejects unknown modes on construction
+        throw(ArgumentError("Invalid optimization method"))
+    end
+end
+
+# train! with dictionary structured real data argument
 function train!(
     model::Model,
     X::Matrix{<:Real},
     Y_dict::Dict{<:Forecast,<:Vector},
     options::Options,
 )
-    # transform dictionary data into ordered matrix
-    y = dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables)
-
-    if options.mode == NelderMeadMode
-        return train_with_nelder_mead!(model, X, y, options.params)
-    elseif options.mode == GradientMode
-        return train_with_gradient!(model, X, y, options.params)
-    elseif options.mode == NelderMeadMPIMode
-        return train_with_nelder_mead_mpi!(model, X, y, options.params)
-    elseif options.mode == GradientMPIMode
-        return train_with_gradient_mpi!(model, X, y, options.params)
-    elseif options.mode == BilevelMode
-        return solve_bilevel(model, X, y, options.params)
-    else
-        # should never get here
-        throw(ArgumentError("Invalid optimization method"))
+    if isnothing(model.forecast)
+        throw(
+            ArgumentError(
+                "No forecast model set. Call set_forecast_model first.",
+            ),
+        )
     end
+    # transform dictionary data into ordered matrix
+    return train!(
+        model,
+        X,
+        _dict_to_var_indexed_matrix(Y_dict, model.forecast.output_variables),
+        options,
+    )
 end
 
 export Model,
@@ -286,7 +385,6 @@ export Model,
     Policy,
     Forecast,
     set_forecast_model,
-    forecast,
     compute_cost,
     train!
 end
