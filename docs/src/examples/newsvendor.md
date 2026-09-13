@@ -86,7 +86,7 @@ set_silent(model)
 
 # forecast model
 pred = Flux.Dense(1 => 2, exp)
-ADL.set_forecast_model(model, pred)
+ADL.set_forecast_model(model, ADL.PredictiveModel(pred))
 ```
 
 Then, we can initialize the data, referencing forecast variables.

@@ -13,6 +13,7 @@ using Flux
 using JuMP
 using Gurobi
 using ApplicationDrivenLearning
+using Optim
 
 ADL = ApplicationDrivenLearning
 ```
@@ -46,7 +47,7 @@ end)
 
 # forecast model
 predictive = Dense(1 => 1, exp; bias=false)
-ADL.set_forecast_model(model, predictive)
+ADL.set_forecast_model(model, ADL.PredictiveModel(predictive))
 ```
 
 We can check how the model performs by computing the assess cost with the initial (random) forecast model.
@@ -63,13 +64,14 @@ julia> ADL.compute_cost(model, X, Y)
 99.7323203086853
 ```
 
-And finally, we can train the model using the Nelder-Mead mode.
+And finally, we can train the model with `OptimMode` over Nelder-Mead.
 
 ```julia
 julia> solution = ADL.train!(
     model, X, Y,
     ADL.Options(
-        ADL.NelderMeadMode,
+        ADL.OptimMode,
+        algorithm=Optim.NelderMead(),
         iterations=100,
         show_trace=true
     )

@@ -13,6 +13,8 @@ using ApplicationDrivenLearning
 using Flux
 using JuMP
 using HiGHS
+using NLopt
+using Optim
 using Random
 import JobQueueMPI as JQM
 
@@ -65,7 +67,9 @@ function newsvendor_model(w0::Float64)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> fill(w0, s))),
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> fill(w0, s))),
+        ),
     )
     return m, d
 end
@@ -245,6 +249,117 @@ check(
     "stochastic gradient: MPI params match serial",
     () -> isapprox(sol_sgd_mpi.params, sol_sgd_serial.params; atol = 1e-3),
     () -> "mpi=$(sol_sgd_mpi.params) serial=$(sol_sgd_serial.params)",
+)
+
+# ---------------------------------------------------------------------------
+# Parallelism as an option rather than a mode.
+#
+# `MPIBackend()` distributes only the per-sample cost and gradient evaluation, so
+# every optimizer can use it - not just the two that used to have an MPI mode of
+# their own. Each check below runs the same optimizer serially and over MPI from
+# the same starting point; the two must agree.
+# ---------------------------------------------------------------------------
+if is_controller()
+    println("== parallel = MPIBackend() ==")
+end
+
+mpi_backend() = ADL.MPIBackend(; finalize = false)
+
+# GradientMode through the new spelling, against the serial run
+m_serial, d_serial = newsvendor_model(1.0)
+sol_new_serial = ADL.train!(
+    m_serial,
+    train_data(d_serial)...,
+    ADL.Options(
+        ADL.GradientMode;
+        rule = Flux.Adam(5.0),
+        epochs = 20,
+        verbose = false,
+    ),
+)
+m_new, d_new = newsvendor_model(1.0)
+sol_new_mpi = ADL.train!(
+    m_new,
+    train_data(d_new)...,
+    ADL.Options(
+        ADL.GradientMode;
+        rule = Flux.Adam(5.0),
+        epochs = 20,
+        verbose = false,
+        parallel = mpi_backend(),
+    ),
+)
+check(
+    "gradient via parallel=MPIBackend(): matches serial",
+    () ->
+        isapprox(sol_new_mpi.cost, sol_new_serial.cost; atol = 1e-4) &&
+            isapprox(sol_new_mpi.params, sol_new_serial.params; atol = 1e-3),
+    () -> "mpi=$(sol_new_mpi.cost) serial=$(sol_new_serial.cost)",
+)
+
+# OptimMode over MPI - impossible before, since only Nelder-Mead had an MPI mode
+m_serial, d_serial = newsvendor_model(1.0)
+sol_opt_serial = ADL.train!(
+    m_serial,
+    train_data(d_serial)...,
+    ADL.Options(
+        ADL.OptimMode;
+        algorithm = Optim.NelderMead(),
+        iterations = 200,
+    ),
+)
+m_opt, d_opt = newsvendor_model(1.0)
+sol_opt_mpi = ADL.train!(
+    m_opt,
+    train_data(d_opt)...,
+    ADL.Options(
+        ADL.OptimMode;
+        algorithm = Optim.NelderMead(),
+        iterations = 200,
+        parallel = mpi_backend(),
+    ),
+)
+check(
+    "OptimMode over MPI: matches serial",
+    () ->
+        isapprox(sol_opt_mpi.cost, sol_opt_serial.cost; atol = 1e-4) &&
+            isapprox(sol_opt_mpi.params, sol_opt_serial.params; atol = 1e-3),
+    () -> "mpi=$(sol_opt_mpi.cost) serial=$(sol_opt_serial.cost)",
+)
+
+# NLoptMode over MPI, with a gradient-based algorithm. This is the case that
+# needs the controller's own model kept at θ: the per-sample dC/dŷ comes back
+# from the workers, but turning it into dC/dθ happens on the controller and reads
+# the controller's parameters.
+function nlopt_opts(extra...)
+    return ADL.Options(
+        ADL.NLoptMode;
+        algorithm = :LD_LBFGS,
+        lower_bounds = [0.0],
+        upper_bounds = [100.0],
+        xtol_rel = 1e-10,
+        maxeval = 200,
+        extra...,
+    )
+end
+m_serial, d_serial = newsvendor_model(1.0)
+sol_nlopt_serial = ADL.train!(m_serial, train_data(d_serial)..., nlopt_opts())
+m_nlopt, d_nlopt = newsvendor_model(1.0)
+sol_nlopt_mpi = ADL.train!(
+    m_nlopt,
+    train_data(d_nlopt)...,
+    nlopt_opts(:parallel => mpi_backend()),
+)
+check(
+    "NLoptMode over MPI (gradient-based): matches serial",
+    () ->
+        isapprox(sol_nlopt_mpi.cost, sol_nlopt_serial.cost; atol = 1e-4) &&
+            isapprox(
+                sol_nlopt_mpi.params,
+                sol_nlopt_serial.params;
+                atol = 1e-3,
+            ),
+    () -> "mpi=$(sol_nlopt_mpi.cost) serial=$(sol_nlopt_serial.cost)",
 )
 
 JQM.mpi_barrier()

@@ -21,7 +21,10 @@ _timer_sections(to) = keys(TO.todict(to)["inner_timers"])
     @objective(ApplicationDrivenLearning.Assess(tmodel), Min, x.assess)
     set_optimizer(tmodel, HiGHS.Optimizer)
     set_silent(tmodel)
-    ApplicationDrivenLearning.set_forecast_model(tmodel, Chain(Dense(1 => 1)))
+    ApplicationDrivenLearning.set_forecast_model(
+        tmodel,
+        ApplicationDrivenLearning.PredictiveModel(Chain(Dense(1 => 1))),
+    )
 
     Tt = 3
     Xt = Float32.(ones(Tt, 1))

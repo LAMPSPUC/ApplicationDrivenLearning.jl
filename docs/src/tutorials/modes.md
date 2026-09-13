@@ -127,7 +127,67 @@ The output shows the solution found by the optimizer. The first value is the cos
 - Relies on parameters specific to the BilevelJuMP package.
 - Does not support integer variables in the plan and assess models.
 
+## Optim mode
+
+Uses any algorithm from the `Optim.jl` package, which is already a dependency, so
+nothing extra needs installing or loading.
+
+The objective handed to Optim is the assessed cost as a function of the flat
+parameter vector of the predictive model. Derivative-free algorithms need nothing
+further. Gradient-based ones are additionally given `dC/dθ` — the same reverse
+pass the [gradient mode](#Gradient-mode) uses, carried one step further from the
+forecasts to the parameters.
+
+### Arguments
+
+- `algorithm`: the Optim.jl algorithm object. Defaults to `Optim.NelderMead()`.
+  Derivative-free choices include `Optim.NelderMead()`, `Optim.ParticleSwarm()` and
+  `Optim.SimulatedAnnealing()`; gradient-based ones include `Optim.LBFGS()`,
+  `Optim.BFGS()`, `Optim.ConjugateGradient()` and `Optim.GradientDescent()`.
+- `lower_bounds`, `upper_bounds`: element-wise bounds on the parameters. When
+  either is given the search is run box-constrained, with the algorithm wrapped in
+  `Optim.Fminbox`. Be aware that `Fminbox` runs its inner algorithm to convergence
+  on every outer iteration, so it is considerably more expensive.
+- Any other parameter acceptable on `Optim.Options` such as `iterations`,
+  `time_limit` and `g_abstol` can be directly passed.
+- `parallel`: the backend used for the per-sample cost and gradient evaluations.
+  Defaults to `SerialBackend()`; `MPIBackend()` distributes them across MPI
+  processes and `DistributedBackend()` across `Distributed` worker
+  processes. See [running in parallel](parallel_backends.md).
+
+### Example
+
+```julia
+opt = ApplicationDrivenLearning.Options(
+    ApplicationDrivenLearning.OptimMode,
+    algorithm = Optim.LBFGS(),
+    iterations = 200,
+)
+sol = ApplicationDrivenLearning.train!(model, X, Y, opt)
+```
+
+### Choosing between them
+
+The assessed cost of a linear application is piecewise linear in the forecasts, so
+`dC/dθ` is piecewise constant with kinks wherever the optimal active set changes.
+On a problem that is convex in the parameters every algorithm here reaches the
+same optimum; on one that is not, different algorithms legitimately settle on
+different local optima, and gradient-based methods may stall at a kink. The
+derivative-free default is the safer starting point.
+
+A related trap: nothing stops an optimizer proposing parameters whose predictions
+the application cannot accommodate — a negative forecast where the plan model
+needs a non-negative one, leaving the plan model infeasible. `lower_bounds` and
+`upper_bounds` are the remedy, and the error raised in that situation says so.
+
 ## Nelder-Mead mode
+
+!!! compat "Deprecated"
+    Superseded by [Optim mode](#Optim-mode), which reaches every Optim.jl
+    algorithm rather than just this one. It behaves exactly as before and existing
+    code keeps working, but note that `initial_simplex` and `parameters` are
+    Nelder-Mead specific, so under `OptimMode` they move into the algorithm
+    object: `Optim.NelderMead(initial_simplex = ...)`.
 
 Uses the Nelder-Mead algorithm implemented in the `Optim.jl` package. This algorithm is a gradient-free optimization algorithm that does not require the gradient of the objective function and is very robust to the choice of the initial guess.
 
@@ -205,6 +265,48 @@ ApplicationDrivenLearning.Solution(300.0f0, Real[20.0f0])
 - Relies on a lot of iterations to accurately optimize the model parameters.
 - Depends on the initial guess that can be given by the user or generated randomly by the Optim.jl package.
 
+## NLopt mode
+
+Uses an algorithm from the [NLopt.jl](https://github.com/jump-dev/NLopt.jl)
+package, through a package extension.
+
+!!! note
+    `NLopt` is a weak dependency: install it and add `using NLopt` before
+    training with this mode. The mode type itself always exists, so forgetting
+    the `using` gives a readable error rather than an `UndefVarError`.
+
+### Arguments
+
+- `algorithm::Symbol`: the NLopt algorithm. Defaults to `:LN_NELDERMEAD`.
+  NLopt encodes the kind in the name: `:LN_*` are local derivative-free
+  (`:LN_BOBYQA`, `:LN_COBYLA`), `:GN_*` global derivative-free (`:GN_DIRECT`),
+  and `:LD_*` gradient-based (`:LD_LBFGS`, `:LD_MMA`, `:LD_SLSQP`). The
+  gradient-based ones are given `dC/dθ` automatically.
+- Any other parameter is set on the NLopt `Opt` object, so stopping criteria
+  use NLopt's names — `xtol_rel`, `xtol_abs`, `ftol_rel`, `ftol_abs`,
+  `maxeval`, `maxtime`, `stopval` — and bounds are `lower_bounds` and
+  `upper_bounds`. This differs from [Optim mode](#Optim-mode), where such
+  keywords are forwarded to `Optim.Options` instead.
+- `parallel`: the backend used for the per-sample cost and gradient evaluations.
+  Defaults to `SerialBackend()`; `MPIBackend()` distributes them across MPI
+  processes and `DistributedBackend()` across `Distributed` worker
+  processes. See [running in parallel](parallel_backends.md).
+
+### Example
+
+```julia
+using NLopt
+
+opt = ApplicationDrivenLearning.Options(
+    ApplicationDrivenLearning.NLoptMode,
+    algorithm = :LD_LBFGS,
+    lower_bounds = [0.0],
+    xtol_rel = 1e-8,
+    maxeval = 2000,
+)
+sol = ApplicationDrivenLearning.train!(model, X, Y, opt)
+```
+
 ## Gradient mode
 
 By computing the gradient of the assessed cost with respect to the forecast values, this mode propagates the gradient to the predictive model parameters, guiding the parameter update process. Since it uses the model structure end-to-end to guide training, it typically requires fewer iterations to achieve good results. However, it may suffer from known issues of gradient-based optimization methods, such as sensitivity to learning rate selection.
@@ -224,6 +326,10 @@ after a specified number of epochs. This enables faster iterations with the draw
 possibly missing sets of parameters with low associated cost.
 - `time_limit`: The time limit for the gradient algorithm in seconds.
 - `g_tol`: Convergence condition on the infinity norm of the per-sample cost gradients with respect to the forecasts (the maximum absolute entry over all samples and outputs). Training stops as soon as this norm falls below `g_tol`. The default is `0`, which effectively disables the check.
+- `parallel`: the backend used for the per-sample cost and gradient evaluations.
+  Defaults to `SerialBackend()`; `MPIBackend()` distributes them across MPI
+  processes and `DistributedBackend()` across `Distributed` worker
+  processes. See [running in parallel](parallel_backends.md).
 
 ### Example
 

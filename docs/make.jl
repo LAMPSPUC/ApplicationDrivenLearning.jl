@@ -14,7 +14,7 @@ Documenter.makedocs(;
                 [
                     "getting_started.md",
                     "modes.md",
-                    "mpi_modes.md",
+                    "parallel_backends.md",
                     "custom_forecast.md",
                 ],
             ),

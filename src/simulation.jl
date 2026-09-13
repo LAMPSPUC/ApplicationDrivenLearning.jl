@@ -1,4 +1,42 @@
 """
+    _assert_has_solution(jump_model::JuMP.Model, what::String)
+
+Throw unless `jump_model` holds a primal solution that can be read.
+
+A *feasibility* check rather than a termination-status one on purpose. What the
+caller needs is a point to read — the policy values out of the plan model, the
+objective out of the assess model — and `has_values` asks exactly that.
+Whitelisting termination statuses would ask something narrower and get it wrong
+in both directions: it would reject a solution that hit an iteration or time
+limit with a perfectly usable incumbent, and it would still have to consult the
+primal status anyway before reading values.
+"""
+function _assert_has_solution(jump_model::JuMP.Model, what::String)
+    status = termination_status(jump_model)
+    reason = if status == MOI.INFEASIBLE
+        "has no feasible solution"
+    elseif status == MOI.DUAL_INFEASIBLE
+        # MOI reports an unbounded primal as an infeasible dual, which reads as
+        # the opposite of what it means unless it is spelled out
+        "is unbounded, so no policy is optimal"
+    elseif status == MOI.INFEASIBLE_OR_UNBOUNDED
+        "is infeasible or unbounded; the solver could not tell which, which " *
+        "presolve often causes - disabling it will say"
+    elseif !has_values(jump_model)
+        "has no solution to read"
+    else
+        return nothing
+    end
+    throw(
+        ErrorException(
+            "The $what model $reason: the solver returned termination status " *
+            "$status and primal status $(primal_status(jump_model)). The " *
+            "application cannot be evaluated at this prediction.",
+        ),
+    )
+end
+
+"""
     _compute_single_step_cost(model::Model, y::AbstractVector{<:Real}, yhat::AbstractVector{<:Real})
 
 Evaluate the assessed cost of a single sample.
@@ -25,17 +63,13 @@ function _compute_single_step_cost(
     # optimize plan model
     @timeit_debug _TIMER "plan_solve" optimize!(model.plan)
     # check for solution and fix assess policy vars
-    try
-        @timeit_debug _TIMER "fix_policy" begin
-            cons = assess_policy_fix_cons(model)
-            policy_vars = plan_policy_vars(model)
-            for i in eachindex(cons, policy_vars)
-                set_normalized_rhs(cons[i], value(policy_vars[i]))
-            end
+    _assert_has_solution(model.plan, "plan")
+    @timeit_debug _TIMER "fix_policy" begin
+        cons = assess_policy_fix_cons(model)
+        policy_vars = plan_policy_vars(model)
+        for i in eachindex(cons, policy_vars)
+            set_normalized_rhs(cons[i], value(policy_vars[i])) # TODO: parameters?
         end
-    catch e
-        println("Optimization failed for PLAN model.")
-        throw(e)
     end
     # fix assess forecast vars on observer values
     @timeit_debug _TIMER "fix_forecast" begin
@@ -47,12 +81,8 @@ function _compute_single_step_cost(
     # optimize assess model
     @timeit_debug _TIMER "assess_solve" optimize!(model.assess)
     # check for optimization
-    try
-        return objective_value(model.assess)
-    catch e
-        println("Optimization failed for ASSESS model")
-        throw(e)
-    end
+    _assert_has_solution(model.assess, "assess")
+    return objective_value(model.assess)
 end
 
 """
@@ -251,4 +281,46 @@ function compute_cost(
     _assert_forecast_model_set(model)
     Xm, Ym = _to_matrices(X, Y, model.forecast)
     return compute_cost(model, Xm, Ym, with_gradients, aggregate)
+end
+
+"""
+    _evaluate_or_explain(f, θ)
+
+Run one objective evaluation, and if it fails, say what the optimizer was doing
+when it did.
+
+An external optimizer explores freely, and nothing stops it proposing parameters
+whose predictions the application cannot accommodate — a negative forecast where
+the plan model needs a non-negative one, say. The plan model is then infeasible
+and the failure surfaces from deep inside the solver stack (typically DiffOpt
+reporting `termination status INFEASIBLE`), naming neither the parameters that
+caused it nor anything the caller can act on. This adds both.
+"""
+function _evaluate_or_explain(f, θ)
+    try
+        return f()
+    catch err
+        throw(
+            ErrorException(
+                "Evaluating the application at θ = $(_short_vector(θ)) failed:\n" *
+                sprint(showerror, err) *
+                "\n\nThis usually means the optimizer proposed parameters whose " *
+                "predictions the application cannot accommodate, leaving the " *
+                "region where the plan model is feasible. Constrain the search " *
+                "with `lower_bounds` / `upper_bounds`, or make the application " *
+                "feasible for every prediction it can be given.",
+            ),
+        )
+    end
+end
+
+"""
+    _short_vector(θ)
+
+A representation of `θ` that stays readable for a network with many parameters.
+"""
+function _short_vector(θ)
+    length(θ) <= 8 && return repr(θ)
+    lo, hi = extrema(θ)
+    return "$(length(θ))-element vector with extrema ($lo, $hi)"
 end

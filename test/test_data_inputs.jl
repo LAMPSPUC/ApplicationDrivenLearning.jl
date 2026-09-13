@@ -44,8 +44,10 @@ function _inputs_newsvendor(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
-        kwargs...,
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
+            kwargs...,
+        ),
     )
     return m, d
 end
@@ -74,8 +76,10 @@ function _two_feature_model(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        Chain(Dense(2 => 1; bias = false, init = (s...) -> [1.0 10.0]));
-        kwargs...,
+        ADL.PredictiveModel(
+            Chain(Dense(2 => 1; bias = false, init = (s...) -> [1.0 10.0]));
+            kwargs...,
+        ),
     )
     return m, d
 end
@@ -104,8 +108,10 @@ function _absdev_model(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
-        kwargs...,
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)));
+            kwargs...,
+        ),
     )
     return m, d
 end
@@ -128,8 +134,10 @@ function _container_forecast_model(; kwargs...)
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...)));
-        kwargs...,
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...)));
+            kwargs...,
+        ),
     )
     return m, f
 end
@@ -155,7 +163,9 @@ function _two_forecast_model()
     set_silent(m)
     ADL.set_forecast_model(
         m,
-        Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...))),
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...))),
+        ),
     )
     return m, d, e
 end
@@ -454,6 +464,129 @@ end
         DataFrame(demand = [3.0, 4.0], price = [5.0, 6.0]),
         false,
         false,
+    )
+end
+
+@testset "output_names follow their variables through the reordering" begin
+    # `set_forecast_model` reorders a `PredictiveModel`'s `output_variables` to
+    # follow the model's own declaration order, so that a prediction's rows line up
+    # with the plan model's forecast parameters. The `output_names` are indexed by
+    # the *old* order and have to be permuted with it - otherwise every column
+    # would be read into the wrong variable, silently.
+    #
+    # This is the one place the permutation is the subject rather than a detail,
+    # which is why the map here is deliberately in the opposite order to the
+    # declarations.
+    m = ADL.Model()
+    @variables(m, begin
+        x, ADL.Policy
+        d, ADL.Forecast      # declaration order: d then e
+        e, ADL.Forecast
+    end)
+    @constraint(ADL.Plan(m), x.plan >= d.plan + 2e.plan)
+    @objective(ADL.Plan(m), Min, x.plan)
+    @variable(ADL.Assess(m), s >= 0)
+    @constraint(ADL.Assess(m), s >= d.assess + 2e.assess - x.assess)
+    @objective(ADL.Assess(m), Min, x.assess + s)
+    set_optimizer(m, HiGHS.Optimizer)
+    set_silent(m)
+
+    # one network per variable, mapped in the *opposite* order, so the predictive
+    # model's `output_variables` are [e, d] while the model's are [d, e]
+    net() = Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...)))
+    pm = ADL.PredictiveModel(
+        [net(), net()],
+        [Dict([1] => [e]), Dict([1] => [d])];
+        output_names = [:e_col, :d_col],
+    )
+    @test pm.output_variables == [e, d]
+    @test pm.output_names == [:e_col, :d_col]
+
+    ADL.set_forecast_model(m, pm)
+    @test m.forecast.output_variables == [d, e]
+    @test m.forecast.output_names == [:d_col, :e_col]   # permuted alongside
+
+    # and the names really do reach the right variables: the plan coefficient on
+    # `e` is twice that on `d`, so a swap would change the cost
+    X = reshape([1.0, 1.0], 2, 1)
+    expected = ADL.compute_cost(
+        m,
+        X,
+        Dict(d => [3.0, 3.0], e => [5.0, 5.0]),
+        false,
+        false,
+    )
+    @test ADL.compute_cost(
+        m,
+        X,
+        DataFrame(e_col = [5.0, 5.0], d_col = [3.0, 3.0]),
+        false,
+        false,
+    ) ≈ expected atol = 1e-6
+
+    # a single-network model has no map, so no `output_variables` to be permuted
+    # against - its names already refer to the declaration order and must survive
+    # untouched
+    mapless = ADL.PredictiveModel(
+        Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...)));
+        output_names = [:d_col, :e_col],
+    )
+    @test isnothing(mapless.output_variables)
+    ADL.set_forecast_model(m, mapless)
+    @test m.forecast.output_names == [:d_col, :e_col]
+    @test ADL.compute_cost(
+        m,
+        X,
+        DataFrame(e_col = [5.0, 5.0], d_col = [3.0, 3.0]),
+        false,
+        false,
+    ) ≈ expected atol = 1e-6
+end
+
+@testset "forecast variables that cannot name their own columns" begin
+    # An anonymous `Forecast` has no name for a column to match, so the model can
+    # only be fed by position or by `Dict`. `_output_column_names` reports that by
+    # returning nothing, and a table then has to be refused rather than guessed at.
+    m = ADL.Model()
+    @variable(m, x, ADL.Policy)
+    anon = @variable(m, [1:2], ADL.Forecast)
+    @constraint(ADL.Plan(m), x.plan >= anon[1].plan + 2anon[2].plan)
+    @objective(ADL.Plan(m), Min, x.plan)
+    @variable(ADL.Assess(m), s >= 0)
+    @constraint(ADL.Assess(m), s >= anon[1].assess + 2anon[2].assess - x.assess)
+    @objective(ADL.Assess(m), Min, x.assess + s)
+    set_optimizer(m, HiGHS.Optimizer)
+    set_silent(m)
+    ADL.set_forecast_model(
+        m,
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...))),
+        ),
+    )
+
+    @test isnothing(ADL._output_column_names(m.forecast))
+
+    X = reshape([1.0, 2.0], 2, 1)
+    # the matrix form still works - it never needed names
+    @test isfinite(ADL.compute_cost(m, X, [3.0 5.0; 4.0 6.0]))
+    # the table form cannot, and says so instead of falling back to column order
+    @test_throws ArgumentError ADL.compute_cost(
+        m,
+        X,
+        DataFrame(a = [3.0, 4.0], b = [5.0, 6.0]),
+    )
+
+    # declaring the names is the way out
+    ADL.set_forecast_model(
+        m,
+        ADL.PredictiveModel(
+            Chain(Dense(1 => 2; bias = false, init = (s...) -> ones(s...)));
+            output_names = [:a, :b],
+        ),
+    )
+    @test ADL._output_column_names(m.forecast) == [:a, :b]
+    @test isfinite(
+        ADL.compute_cost(m, X, DataFrame(a = [3.0, 4.0], b = [5.0, 6.0])),
     )
 end
 

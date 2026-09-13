@@ -206,64 +206,41 @@ Return the `assess_policy_fix` constraints, which pin the assess
 assess_policy_fix_cons(model::Model) = model._assess_policy_fix
 
 """
-    set_forecast_model(model::Model, network; input_names = nothing, output_names = nothing, sample_key = nothing)
+    set_forecast_model(model::Model, forecast::PredictiveModel)
 
-Attach a predictive (forecast) model to `model`. `network` may be a
-`Flux.Chain`, a `Flux.Dense` or an already built [`PredictiveModel`](@ref);
-the two former are wrapped into a `PredictiveModel` automatically.
+Attach a predictive (forecast) model to `model`.
 
-The output size of the predictive model must match the number of
-[`Forecast`](@ref) variables declared on `model`. If the predictive model has
-no `input_output_map`, a trivial one mapping every input to every forecast
-variable is created. The stored model's `output_variables` are always
-reordered to follow `model.forecast_vars`, so that the rows of a prediction
-line up with the forecast parameters of the plan model.
+The output size of `forecast` must match the number of [`Forecast`](@ref)
+variables declared on `model`. If it has no `input_output_map`, a trivial one
+mapping every input to every forecast variable is created. Its
+`output_variables` are always reordered to follow `model.forecast_vars`, so that
+the rows of a prediction line up with the forecast parameters of the plan model —
+and any `output_names` follow their variables through that reordering.
 
-# Keyword arguments
+The schema — `input_names`, `output_names` and `sample_key` — is declared on the
+[`PredictiveModel`](@ref) and nowhere else:
 
-  - `input_names::Vector{Symbol}`: name of each column of `X`, in the order the
-    predictive model expects them. Declaring them is what allows `X` to be given
-    as a table, since a table's columns are then selected by name rather than
-    trusted to be in the right order. A `Symbol`-keyed `input_output_map`
-    declares them implicitly and needs no keyword here.
-  - `output_names::Vector{Symbol}`: name of the column of `Y` holding each
-    forecast variable, in declaration order. Only needed when the columns are
-    not named after the variables themselves — most usefully for container
-    declarations such as `@variable(model, d[1:2], Forecast)`, whose variables
-    are named `d[1]` and `d[2]`.
-  - `sample_key::Symbol`: name of the column that identifies a *row* — a
-    timestamp or an id. When both `X` and `Y` are tables carrying it, the
-    realized values are looked up by key for each row of `X` instead of being
-    trusted to arrive in the same order, and a sample that is missing from `Y` is
-    an error rather than an off-by-one. Rows are matched by position when it is
-    not declared, or when either side is a container that carries no row labels
-    (an array, or the `Dict` form of `Y`).
+```julia
+set_forecast_model(
+    model,
+    PredictiveModel(
+        Flux.Chain(Flux.Dense(2 => 1));
+        input_names = [:temp, :hour],
+    ),
+)
+```
 
-The keywords override whatever the passed [`PredictiveModel`](@ref) was built
-with.
+This function used to accept a bare `Flux.Chain`/`Dense` and the same three
+keywords. It no longer does, because the keywords and the `PredictiveModel`
+fields of the same name were indexed by *different* orders — the keywords by
+`model.forecast_vars`, the fields by the predictive model's own
+`output_variables` — and supplying both silently picked one. There is now a
+single place to say it.
 
 Returns the stored [`PredictiveModel`](@ref).
 """
-function set_forecast_model(
-    model::Model,
-    network::Union{PredictiveModel,Flux.Chain,Flux.Dense};
-    input_names::Union{Vector{Symbol},Nothing} = nothing,
-    output_names::Union{Vector{Symbol},Nothing} = nothing,
-    sample_key::Union{Symbol,Nothing} = nothing,
-)
-    if network isa PredictiveModel
-        forecast = network
-    else
-        forecast = PredictiveModel(network)
-    end
+function set_forecast_model(model::Model, forecast::PredictiveModel)
     @assert forecast.output_size == length(model.forecast_vars) "Output size of forecast model must match number of forecast variables"
-
-    if isnothing(input_names)
-        input_names = forecast.input_names
-    end
-    if isnothing(sample_key)
-        sample_key = forecast.sample_key
-    end
 
     input_output_map = forecast.input_output_map
     if isnothing(input_output_map)
@@ -273,11 +250,11 @@ function set_forecast_model(
             [Dict(collect(1:forecast.input_size) => model.forecast_vars)]
     end
 
-    if isnothing(output_names) && !isnothing(forecast.output_names)
-        # the stored names align with the model's own `output_variables`, so they
-        # have to follow those variables through the reordering below. A keyword
-        # instead names `model.forecast_vars`, i.e. the final order already.
-        output_names = if isnothing(forecast.output_variables)
+    # the stored names align with the predictive model's own `output_variables`,
+    # so they have to follow those variables through the reordering below
+    output_names =
+        if isnothing(forecast.output_names) ||
+           isnothing(forecast.output_variables)
             forecast.output_names
         else
             forecast.output_names[_find_elements_position(
@@ -285,7 +262,6 @@ function set_forecast_model(
                 model.forecast_vars,
             )]
         end
-    end
 
     # rebuild unconditionally: `output_variables` must follow
     # `model.forecast_vars` so that the rows of a prediction line up with the
@@ -296,9 +272,9 @@ function set_forecast_model(
         model.forecast_vars,
         forecast.input_size,
         forecast.output_size;
-        input_names = input_names,
+        input_names = forecast.input_names,
         output_names = output_names,
-        sample_key = sample_key,
+        sample_key = forecast.sample_key,
     )
 end
 
@@ -365,10 +341,11 @@ include("jump.jl")
 include("simulation.jl")
 include("options.jl")
 include("solution.jl")
+include("optimizers/parallel.jl")
+include("optimizers/parallel_mpi.jl")
+include("optimizers/parallel_distributed.jl")
 include("optimizers/gradient.jl")
-include("optimizers/nelder_mead.jl")
-include("optimizers/nelder_mead_mpi.jl")
-include("optimizers/gradient_mpi.jl")
+include("optimizers/optim.jl")
 include("optimizers/bilevel.jl")
 
 """
@@ -471,9 +448,10 @@ function train!(
     options::Options,
 )
     _assert_forecast_model_set(model)
+    _assert_model_is_enough(_parallel_backend(options.params))
 
-    # the MPI modes call `_compute_single_step_cost` directly instead of going
-    # through `compute_cost`, so the parameters and the policy-fixing
+    # the parallel backends call `_compute_single_step_cost` directly instead of
+    # going through `compute_cost`, so the parameters and the policy-fixing
     # constraint have to be in place before training starts
     _build(model)
 
@@ -481,18 +459,63 @@ function train!(
 end
 
 """
+    train!(build_model::Function, X, Y, options::Options)
+
+Train a model built by `build_model`, a zero-argument function returning a
+ready-to-solve [`Model`](@ref) — variables, constraints, objectives,
+`set_optimizer` and [`set_forecast_model`](@ref) all done.
+
+Equivalent to building the model and calling `train!` on it, except that the
+function itself is available to the parallel backend. That is what
+[`DistributedBackend`](@ref) needs: its workers never run your script, and a model
+that has had `set_optimizer` called on it cannot be sent to them at all, so a
+builder is the only way they can obtain one. Passing a `Model` under that backend
+is an error.
+
+Using one function for the whole run is also what makes the driver's model and the
+workers' models the same problem by construction, rather than two descriptions
+that have to be checked against each other.
+
+!!! note
+
+    The caller keeps no reference to the model this builds. The fitted parameters
+    are in the returned `Solution`, so a fitted model is recovered with
+
+    ```julia
+    sol = train!(build_model, X, Y, options)
+    m = build_model()
+    ApplicationDrivenLearning.apply_params(m.forecast, sol.params)
+    ```
+
+    Both methods return a [`Solution`](@ref); a return type that depended on which
+    one was called would be worse than this.
+"""
+function train!(
+    build_model::Function,
+    @nospecialize(X),
+    @nospecialize(Y),
+    options::Options,
+)
+    model = build_model()
+    if !(model isa Model)
+        throw(
+            ArgumentError(
+                "The model builder passed to `train!` must return an " *
+                "`ApplicationDrivenLearning.Model`, got $(typeof(model)).",
+            ),
+        )
+    end
+    return train!(model, X, Y, _with_model_builder(options, build_model))
+end
+
+"""
     _train!(mode, model, X, Y, params)
 
-Run the training loop belonging to `mode`.
+Run the trainer registered for `mode` on already-normalized matrices.
 
-One method per [`AbstractOptimizationMode`](@ref), defined next to the loop it
-calls rather than listed here, so that adding a mode is adding a method. This
-matters beyond tidiness: a mode implemented in a package extension can add a
-method, and cannot add a branch to an `if`.
-
-`Options` rejects unknown modes on construction, so the fallback below is only
-reachable by calling this directly - which is why it names the mode rather than
-saying that something was invalid.
+`Options` already accepts any `Type{<:AbstractOptimizationMode}`
+([`Options`](@ref)), so registering a new mode means declaring the singleton type
+and adding one method below.
 """
 function _train!(
     mode,
@@ -503,8 +526,9 @@ function _train!(
 )
     return throw(
         ArgumentError(
-            "No training loop is defined for mode $mode. Every mode needs a " *
-            "`_train!(::Type{Mode}, model, X, Y, params)` method.",
+            "No trainer is registered for optimization mode `$mode`. Modes " *
+            "provided by a package extension need that package loaded first: " *
+            "`NLoptMode` requires `using NLopt`.",
         ),
     )
 end

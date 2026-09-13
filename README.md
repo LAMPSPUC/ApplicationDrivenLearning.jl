@@ -13,6 +13,7 @@ ApplicationDrivenLearning.jl is a Julia package for training time series models 
 ```julia
 using ApplicationDrivenLearning
 using Flux
+using Optim
 using JuMP
 import HiGHS
 
@@ -53,7 +54,7 @@ set_silent(model)
 
 # forecast model
 nn = Chain(Dense(1 => 1; bias=false))
-ApplicationDrivenLearning.set_forecast_model(model, nn)
+ApplicationDrivenLearning.set_forecast_model(model, ApplicationDrivenLearning.PredictiveModel(nn))
 
 # data: `X` is a (samples x inputs) matrix and `Y` maps each forecast
 # variable to its vector of realized values
@@ -66,7 +67,8 @@ solution = ApplicationDrivenLearning.train!(
     X,
     Y,
     ApplicationDrivenLearning.Options(
-        ApplicationDrivenLearning.NelderMeadMode
+        ApplicationDrivenLearning.OptimMode;
+        algorithm = Optim.NelderMead(),
     )
 )
 print(solution.params)
