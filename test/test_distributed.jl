@@ -385,6 +385,47 @@ ADL.train!(
         @test occursin("holds no model", sprint(showerror, err))
     end
 
+    @testset "a builder that fails partway releases the workers it reached" begin
+        # `_worker_materialize` asserts the builder set a forecast model, which
+        # makes a first run with a new builder the likely way this fails - and it
+        # fails per worker, so one can already be holding a model when another
+        # throws. Those must be released too, or they keep that model and a full
+        # copy of the data for the rest of the session.
+        #
+        # The sleep makes the interleaving deterministic rather than racing the
+        # two `asyncmap` tasks: the surviving worker is finished before the other
+        # fails, so there is always something left to release.
+        failing = last(workers())
+        err = try
+            ADL.train!(
+                dist_data()...,
+                ADL.Options(
+                    ADL.GradientMode;
+                    epochs = 1,
+                    verbose = false,
+                    parallel = dist_backend(),
+                ),
+            ) do
+                if Distributed.myid() == failing
+                    sleep(0.5)
+                    error("builder failed on worker $(Distributed.myid())")
+                end
+                return dist_builder()
+            end
+            nothing
+        catch e
+            e
+        end
+        @test !isnothing(err)
+
+        for w in workers()
+            @test remotecall_fetch(
+                () -> isnothing(ApplicationDrivenLearning._WORKER_STATE[]),
+                w,
+            )
+        end
+    end
+
     @testset "the value check is skipped loudly when the driver cannot solve" begin
         # The driver never solves under this backend, so a model with no optimizer
         # attached is legitimate - but then the cost comparison cannot run. It has

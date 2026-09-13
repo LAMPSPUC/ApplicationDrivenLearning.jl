@@ -336,14 +336,18 @@ function _with_evaluator(
     Y::AbstractMatrix{<:Real},
 )
     pool = _worker_pool(parallel)
-    shapes = asyncmap(pool) do w
-        return remotecall_fetch(_worker_materialize, w, parallel.builder, X, Y)
-    end
 
     # `try`/`finally` for the same reason `MPIBackend` has one: an optimizer
     # exploring freely can provoke a failed solve, and the workers must not be left
-    # holding a model - a later `train!` would otherwise find a stale one
+    # holding a model - a later `train!` would otherwise find a stale one.
+    # Materializing inside it covers the builder throwing partway through the pool,
+    # which `_assert_forecast_model_set` makes a likely first run: releasing a
+    # worker that never materialized is a no-op, so the whole pool can be released
+    # whatever happened.
     try
+        shapes = asyncmap(pool) do w
+            return remotecall_fetch(_worker_materialize, w, parallel.builder, X, Y)
+        end
         _verify_worker_models(model, shapes, pool, parallel.verify, X, Y)
 
         function evaluate(θ, batch::SampleBatch; with_gradients::Bool = false)
