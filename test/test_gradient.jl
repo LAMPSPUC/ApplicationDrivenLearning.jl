@@ -40,6 +40,139 @@ Y = Dict(d => Float32.(ones(1)))
     @test initial_sol == sol.params
 end
 
+"""
+Newsvendor with `c < q` and `r = 0`, so the per-sample cost gradient with
+respect to the forecast is `c - q` when the forecast understocks and `c` when
+it overstocks. Returns the model and its `Forecast` variable.
+"""
+function _sgd_newsvendor(c_s = 1.0, q_s = 3.0, r_s = 0.0)
+    m = ApplicationDrivenLearning.Model()
+    @variables(m, begin
+        x, ApplicationDrivenLearning.Policy
+        d, ApplicationDrivenLearning.Forecast
+    end)
+    @variables(ApplicationDrivenLearning.Plan(m), begin
+        yp >= 0
+        wp >= 0
+    end)
+    @constraints(ApplicationDrivenLearning.Plan(m), begin
+        yp <= d.plan
+        yp + wp <= x.plan
+    end)
+    @objective(
+        ApplicationDrivenLearning.Plan(m),
+        Min,
+        c_s * x.plan - q_s * yp - r_s * wp
+    )
+    @variables(ApplicationDrivenLearning.Assess(m), begin
+        ya >= 0
+        wa >= 0
+    end)
+    @constraints(ApplicationDrivenLearning.Assess(m), begin
+        ya <= d.assess
+        ya + wa <= x.assess
+    end)
+    @objective(
+        ApplicationDrivenLearning.Assess(m),
+        Min,
+        c_s * x.assess - q_s * ya - r_s * wa
+    )
+    set_optimizer(m, HiGHS.Optimizer)
+    set_silent(m)
+    ApplicationDrivenLearning.set_forecast_model(
+        m,
+        Chain(Dense(1 => 1; bias = false, init = (s...) -> ones(s...))),
+    )
+    return m, d
+end
+
+@testset "GradientMode Stochastic Batches" begin
+    # The stochastic branch of `_train_with_gradient!` and the whole of
+    # `_stochastic_compute` are otherwise only reached from the `mpiexec`
+    # subprocess in test_mpi.jl, which is skipped whenever ADL_SKIP_MPI_TESTS
+    # is set and never reports coverage.
+    c_s, q_s = 1.0, 3.0
+
+    # `_stochastic_compute` must take its gradient from the batch and, when
+    # asked for the full cost, its cost from the whole dataset.
+    ms, _ = _sgd_newsvendor(c_s, q_s)
+
+    # θ₀ = 1 and no bias, so ŷ_t = x_t. Samples 1 and 2 understock
+    # (ŷ < d ⇒ dC/dŷ = c - q = -2), samples 3 and 4 overstock
+    # (ŷ > d ⇒ dC/dŷ = c = 1).
+    Xs = reshape([1.0, 2.0, 3.0, 4.0], 4, 1)
+    Ys = reshape([9.0, 9.0, 1.0, 1.0], 4, 1)
+    batch = [1, 3]
+    epochx = Xs[batch, :]
+
+    C_batch, dC_batch = ApplicationDrivenLearning._stochastic_compute(
+        ms,
+        Xs,
+        Ys,
+        epochx,
+        batch,
+        false,
+    )
+    # per-sample assessed costs are [-2, -4, 0, 1]
+    @test C_batch ≈ -1.0                     # mean over the batch
+    @test size(dC_batch) == (length(batch), 1)
+    # rows follow the batch, not the dataset: sample 1 understocks, 3 overstocks
+    @test vec(dC_batch) ≈ [c_s - q_s, c_s]
+
+    C_full, dC_full = ApplicationDrivenLearning._stochastic_compute(
+        ms,
+        Xs,
+        Ys,
+        epochx,
+        batch,
+        true,
+    )
+    @test C_full ≈ -1.25                     # mean over the whole dataset
+    @test C_full != C_batch                  # the two really do differ here
+    @test dC_full == dC_batch                # gradient still only over the batch
+
+    # end to end: the stochastic branch trains to the known optimum. All four
+    # samples share the same demand, so the run is independent of which rows
+    # each batch happens to draw.
+    me, de = _sgd_newsvendor(c_s, q_s)
+    Xe = ones(4, 1)
+    Ye = Dict(de => fill(50.0, 4))
+    Random.seed!(2024)
+    sol = ApplicationDrivenLearning.train!(
+        me,
+        Xe,
+        Ye,
+        ApplicationDrivenLearning.Options(
+            ApplicationDrivenLearning.GradientMode;
+            rule = Flux.Adam(1.0),
+            epochs = 200,
+            batch_size = 2,
+            verbose = false,
+        ),
+    )
+    @test sol.params[1] ≈ 50.0 atol = 1e-1
+    @test sol.cost ≈ (c_s - q_s) * 50.0 atol = 1e-1
+
+    # `compute_cost_every` gates only the extra full-dataset cost sweep, so
+    # training still runs when it never fires
+    mq, dq = _sgd_newsvendor(c_s, q_s)
+    Random.seed!(2024)
+    sol_q = ApplicationDrivenLearning.train!(
+        mq,
+        Xe,
+        Dict(dq => fill(50.0, 4)),
+        ApplicationDrivenLearning.Options(
+            ApplicationDrivenLearning.GradientMode;
+            rule = Flux.Adam(1.0),
+            epochs = 3,
+            batch_size = 2,
+            compute_cost_every = 10,
+            verbose = false,
+        ),
+    )
+    @test sol_q.cost == Inf                  # no full cost was ever computed
+end
+
 @testset "GradientMode Multi-Sample Gradient Correctness" begin
     # Newsvendor model where the per-sample cost-gradient (dC/dŷ) depends on
     # whether the forecast over- or under-shoots the realized demand. The

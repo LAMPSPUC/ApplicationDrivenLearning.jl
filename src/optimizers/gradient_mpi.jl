@@ -1,5 +1,4 @@
 using Flux
-import ParametricOptInterface as POI
 using MPI
 import JobQueueMPI as JQM
 
@@ -139,7 +138,7 @@ function _train_with_gradient_mpi!(
             end
 
             # check gradient tolerance
-            if maximum(abs.(dC)) < g_tol
+            if maximum(abs, dC) < g_tol
                 if verbose
                     println("Gradient tolerance reached.")
                 end

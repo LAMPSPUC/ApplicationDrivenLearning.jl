@@ -138,7 +138,7 @@ the dimension of predictive model parameters. It will be used to start the searc
 - `parameters`: Used to generate parameters for the algorithm. Same parameter from
 Optim implementation of Nelder-Mead.
 - Any other parameter acceptable on `Optim.Options` such as `iterations`, `time_limit`
-and `g_tol` can be directly passed.
+and `g_abstol` can be directly passed.
 
 ### Example
 

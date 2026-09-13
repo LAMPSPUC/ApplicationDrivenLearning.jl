@@ -1,16 +1,25 @@
 using Flux
 
 """
-    _stochastic_compute(model, X, Y, batch, compute_full_cost)
+    _stochastic_compute(model, X, Y, epochx, batch, compute_full_cost)
 
 Compute the assess cost and the cost gradient (with respect to the predicted
-values) on a subset `batch` of the examples.
+values) on a subset `batch` of the examples. `epochx` must be `X[batch, :]`,
+which the caller already needs for the gradient step and so passes in rather
+than having it built twice.
 
 When `compute_full_cost` is `true`, the returned cost is recomputed over the
 whole dataset — the gradient still refers to the batch only.
 """
-function _stochastic_compute(model, X, Y, batch, compute_full_cost::Bool)
-    C, dC = compute_cost(model, X[batch, :], Y[batch, :], true)
+function _stochastic_compute(
+    model,
+    X,
+    Y,
+    epochx,
+    batch,
+    compute_full_cost::Bool,
+)
+    C, dC = compute_cost(model, epochx, Y[batch, :], true)
     if compute_full_cost
         C = compute_cost(model, X, Y, false)
     end
@@ -70,12 +79,14 @@ function _train_with_gradient!(
         compute_full_cost = epoch % compute_cost_every == 0
 
         if stochastic
-            epochx = X[batches[epoch, :], :]
+            batch = view(batches, epoch, :)
+            epochx = X[batch, :]
             C, dC = _stochastic_compute(
                 model,
                 X,
                 Y,
-                batches[epoch, :],
+                epochx,
+                batch,
                 compute_full_cost,
             )
         else
@@ -108,7 +119,7 @@ function _train_with_gradient!(
         end
 
         # check gradient tolerance
-        if maximum(abs.(dC)) < g_tol
+        if maximum(abs, dC) < g_tol
             if verbose
                 println("Gradient tolerance reached.")
             end

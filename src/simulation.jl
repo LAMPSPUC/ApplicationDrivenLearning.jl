@@ -1,5 +1,5 @@
 """
-    _compute_single_step_cost(model::Model, y::Vector{<:Real}, yhat::Vector{<:Real})
+    _compute_single_step_cost(model::Model, y::AbstractVector{<:Real}, yhat::AbstractVector{<:Real})
 
 Evaluate the assessed cost of a single sample.
 
@@ -12,27 +12,40 @@ Requires `_build` to have been called on `model`.
 """
 function _compute_single_step_cost(
     model::Model,
-    y::Vector{<:Real},
-    yhat::Vector{<:Real},
+    y::AbstractVector{<:Real},
+    yhat::AbstractVector{<:Real},
 )
     # set forecast params as prediction output
-    MOI.set.(model.plan, POI.ParameterValue(), model.plan_forecast_params, yhat)
+    @timeit_debug _TIMER "set_params" begin
+        params = model.plan_forecast_params
+        for j in eachindex(params, yhat)
+            set_parameter_value(params[j], yhat[j])
+        end
+    end
     # optimize plan model
-    optimize!(model.plan)
+    @timeit_debug _TIMER "plan_solve" optimize!(model.plan)
     # check for solution and fix assess policy vars
     try
-        set_normalized_rhs.(
-            model.assess[:assess_policy_fix],
-            value.(plan_policy_vars(model)),
-        )
+        @timeit_debug _TIMER "fix_policy" begin
+            cons = assess_policy_fix_cons(model)
+            policy_vars = plan_policy_vars(model)
+            for i in eachindex(cons, policy_vars)
+                set_normalized_rhs(cons[i], value(policy_vars[i]))
+            end
+        end
     catch e
         println("Optimization failed for PLAN model.")
         throw(e)
     end
     # fix assess forecast vars on observer values
-    fix.(assess_forecast_vars(model), y; force = true)
+    @timeit_debug _TIMER "fix_forecast" begin
+        forecast_vars = assess_forecast_vars(model)
+        for j in eachindex(forecast_vars, y)
+            fix(forecast_vars[j], y[j]; force = true)
+        end
+    end
     # optimize assess model
-    optimize!(model.assess)
+    @timeit_debug _TIMER "assess_solve" optimize!(model.assess)
     # check for optimization
     try
         return objective_value(model.assess)
@@ -62,25 +75,36 @@ function _compute_single_step_gradient(
     dCdz::Vector{<:Real},
     dCdy::Vector{<:Real},
 )
-    dCdz .= dual.(model.assess[:assess_policy_fix])
-    DiffOpt.empty_input_sensitivities!(model.plan)
-    policy_vars = plan_policy_vars(model)
-    for i in eachindex(policy_vars)
-        MOI.set(
-            model.plan,
-            DiffOpt.ReverseVariablePrimal(),
-            policy_vars[i],
-            dCdz[i],
-        )
+    @timeit_debug _TIMER "read_duals" begin
+        cons = assess_policy_fix_cons(model)
+        for i in eachindex(dCdz, cons)
+            dCdz[i] = dual(cons[i])
+        end
     end
-    DiffOpt.reverse_differentiate!(model.plan)
-    for j = 1:size(model.forecast_vars, 1)
-        dCdy[j] =
-            MOI.get(
+    @timeit_debug _TIMER "set_reverse_seed" begin
+        DiffOpt.empty_input_sensitivities!(model.plan)
+        policy_vars = plan_policy_vars(model)
+        for i in eachindex(policy_vars)
+            MOI.set(
                 model.plan,
-                DiffOpt.ReverseConstraintSet(),
-                ParameterRef(model.plan_forecast_params[j]),
-            ).value
+                DiffOpt.ReverseVariablePrimal(),
+                policy_vars[i],
+                dCdz[i],
+            )
+        end
+    end
+    @timeit_debug _TIMER "diffopt_reverse" DiffOpt.reverse_differentiate!(
+        model.plan,
+    )
+    @timeit_debug _TIMER "read_sensitivities" begin
+        for j = 1:size(model.forecast_vars, 1)
+            dCdy[j] =
+                MOI.get(
+                    model.plan,
+                    DiffOpt.ReverseConstraintSet(),
+                    ParameterRef(model.plan_forecast_params[j]),
+                ).value
+        end
     end
 
     return dCdy
@@ -138,23 +162,33 @@ function compute_cost(
     dCdz = Vector{Float64}(undef, length(model.policy_vars))
     dCdy = Vector{Float64}(undef, model.forecast.output_size)
 
-    function _compute_step(y, yhat)
-        c = _compute_single_step_cost(model, y, yhat)
-        if with_gradients
+    # get predictions; kept in the (output_size, T) layout the predictive model
+    # produces, so that the per-sample prediction below is a contiguous column
+    Yhat = @timeit_debug _TIMER "forward_pass" model.forecast(X')
+
+    # main loop to compute cost - the two branches are written out so that the
+    # gradient result has a single concrete type and so that the non-gradient
+    # case does not touch `dC` at all
+    @timeit_debug _TIMER "sample_loop" if with_gradients
+        for t = 1:T
+            C[t] += _compute_single_step_cost(
+                model,
+                view(Y, t, :),
+                view(Yhat, :, t),
+            )
             dc = _compute_single_step_gradient(model, dCdz, dCdy)
-            return c, dc
+            for j in eachindex(dc)
+                dC[t, j] += dc[j]
+            end
         end
-        return c, 0
-    end
-
-    # get predictions
-    Yhat = model.forecast(X')'  # size=(T, output_size)
-
-    # main loop to compute cost
-    for t = 1:T
-        result = _compute_step(Y[t, :], Yhat[t, :])
-        C[t] += result[1]
-        dC[t, :] .+= result[2]
+    else
+        for t = 1:T
+            C[t] += _compute_single_step_cost(
+                model,
+                view(Y, t, :),
+                view(Yhat, :, t),
+            )
+        end
     end
 
     # aggregate cost if requested
